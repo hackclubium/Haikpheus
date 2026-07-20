@@ -1,7 +1,24 @@
 import { analyzeHaiku, syllableCounts } from './scripts/haiku.mjs';
 
-const VERSION = 'haikpheus-events-v18';
+const VERSION = 'haikpheus-events-v19';
 const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
+const ENABLED_FLAVORS = [
+  'haiku enabled!',
+  'your syllables shall now be counted',
+  'poetic justice incoming',
+  'your inner poet is now free',
+  'haiku powers: unlocked',
+  'time to channel your inner poet'
+];
+const DISABLED_FLAVORS = [
+  'okay, no more haiku for you',
+  'got it, not a poetry person',
+  "i'll spare you from my poetic wrath",
+  'your loss, but i respect your choice',
+  "fine, but i'll still be counting syllables in my head",
+  'understood, but my inner poet is crying',
+  'okay, but my muse is giving you the side-eye'
+];
 
 export default {
   async fetch(request, env, ctx) {
@@ -39,7 +56,7 @@ export default {
 
     const form = new URLSearchParams(rawBody);
     const command = form.get('command');
-    if (!['/haik-in', '/haik-out', '/haik-chan-in', '/haik-chan-out'].includes(command)) {
+    if (!['/haik-in', '/haik-out', '/haik-chan-in', '/haik-chan-out', '/enable-haiku', '/disable-haiku'].includes(command)) {
       return slackResponse('Unknown command.');
     }
 
@@ -181,11 +198,11 @@ async function slackEvent(rawBody, env) {
   await slack(env, 'chat.postMessage', {
     channel: event.channel,
     thread_ts: event.ts,
-    text: `${haiku}\n---\nby <@${event.user}>`,
+    text: `${haiku}\n---\n– a haiku by <@${event.user}>, ${new Date().getUTCFullYear()}`,
     blocks: [
       { type: 'section', text: { type: 'mrkdwn', text: haiku } },
       { type: 'divider' },
-      { type: 'context', elements: [{ type: 'mrkdwn', text: `by <@${event.user}>` }] }
+      { type: 'context', elements: [{ type: 'mrkdwn', text: `– a haiku by <@${event.user}>, ${new Date().getUTCFullYear()}` }] }
     ],
     unfurl_links: false,
     unfurl_media: false
@@ -256,20 +273,28 @@ function slackResponse(text) {
 
 function messageFor(command) {
   return {
-    '/haik-in': 'Haiku tracking on for you.',
-    '/haik-out': 'Haiku tracking off for you.',
+    '/haik-in': `${sample(ENABLED_FLAVORS)} – you can disable it with \`/haik-out\``,
+    '/enable-haiku': `${sample(ENABLED_FLAVORS)} – you can disable it with \`/haik-out\``,
+    '/haik-out': `${sample(DISABLED_FLAVORS)} – you can reënable it with \`/haik-in\``,
+    '/disable-haiku': `${sample(DISABLED_FLAVORS)} – you can reënable it with \`/haik-in\``,
     '/haik-chan-in': 'Haiku tracking on for this channel.',
     '/haik-chan-out': 'Haiku tracking off for this channel.'
   }[command];
+}
+
+function sample(items) {
+  return items[Math.floor(Math.random() * items.length)];
 }
 
 async function updateState(env, command, channel, user) {
   const state = await getState(env);
   switch (command) {
     case '/haik-in':
+    case '/enable-haiku':
       add(state.users, user);
       break;
     case '/haik-out':
+    case '/disable-haiku':
       remove(state.users, user);
       break;
     case '/haik-chan-in':

@@ -29,11 +29,11 @@ export async function main() {
       await slack(token, 'chat.postMessage', {
         channel,
         thread_ts: message.ts,
-        text: `${haiku}\n---\nby <@${message.user}>`,
+        text: `${haiku}\n---\n– a haiku by <@${message.user}>, ${new Date().getUTCFullYear()}`,
         blocks: [
           { type: 'section', text: { type: 'mrkdwn', text: haiku } },
           { type: 'divider' },
-          { type: 'context', elements: [{ type: 'mrkdwn', text: `by <@${message.user}>` }] }
+          { type: 'context', elements: [{ type: 'mrkdwn', text: `– a haiku by <@${message.user}>, ${new Date().getUTCFullYear()}` }] }
         ],
         unfurl_links: false,
         unfurl_media: false

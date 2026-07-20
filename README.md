@@ -40,6 +40,8 @@ Add these slash commands, all pointing at the Worker URL:
 - `/haik-out`
 - `/haik-chan-in`
 - `/haik-chan-out`
+- `/enable-haiku` optional Orpheus-compatible alias for `/haik-in`
+- `/disable-haiku` optional Orpheus-compatible alias for `/haik-out`
 
 `/haik-chan-in` tries to join public channels automatically. Private channels still need:
 
