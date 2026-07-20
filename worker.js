@@ -1,6 +1,6 @@
 import { analyzeHaiku, syllableCounts } from './scripts/haiku.mjs';
 
-const VERSION = 'haikpheus-events-v21';
+const VERSION = 'haikpheus-events-v22';
 const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
 const ENABLED_FLAVORS = [
   'haiku enabled!',
@@ -109,7 +109,8 @@ async function debugState(env) {
   const diagnostic = (await env.HAIKPHEUS_STATE.get('lastDiagnostic', 'json')) ?? null;
   const messageDiagnostic = (await env.HAIKPHEUS_STATE.get('lastMessageDiagnostic', 'json')) ?? null;
   const slashDiagnostic = (await env.HAIKPHEUS_STATE.get('lastSlashDiagnostic', 'json')) ?? null;
-  return Response.json({ version: VERSION, state, diagnostic, messageDiagnostic, slashDiagnostic });
+  const recentMessages = (await env.HAIKPHEUS_STATE.get('recentMessageDiagnostics', 'json')) ?? [];
+  return Response.json({ version: VERSION, state, diagnostic, messageDiagnostic, slashDiagnostic, recentMessages });
 }
 
 function analyzeRequest(url) {
@@ -129,6 +130,9 @@ async function recordDiagnostic(env, value) {
 
 async function recordMessageDiagnostic(env, value) {
   await env.HAIKPHEUS_STATE.put('lastMessageDiagnostic', JSON.stringify(value));
+  const recent = (await env.HAIKPHEUS_STATE.get('recentMessageDiagnostics', 'json')) ?? [];
+  recent.unshift(value);
+  await env.HAIKPHEUS_STATE.put('recentMessageDiagnostics', JSON.stringify(recent.slice(0, 20)));
   await recordDiagnostic(env, value);
 }
 
