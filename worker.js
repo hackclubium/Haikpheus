@@ -2,7 +2,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/__haikpheus/version') {
-      return new Response('haikpheus-events-v3', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+      return new Response('haikpheus-events-v4', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
     }
     if (request.method === 'GET' && url.pathname === '/__haikpheus/health') return health(env);
     if (request.method === 'GET' && url.pathname === '/__haikpheus/last') return lastDiagnostic(request, env);
@@ -38,9 +38,13 @@ export default {
     }
 
     const payload = { command, channel: form.get('channel_id'), user: form.get('user_id') };
-    waitUntil(ctx, updateState(env, payload.command, payload.channel, payload.user)
-      .then(() => recordDiagnostic(env, { ...payload, type: 'slash_ok', at: new Date().toISOString() }))
-      .catch((error) => recordDiagnostic(env, { ...payload, type: 'slash_error', error: error.message, at: new Date().toISOString() })));
+    try {
+      await updateState(env, payload.command, payload.channel, payload.user);
+      await recordDiagnostic(env, { ...payload, type: 'slash_ok', at: new Date().toISOString() });
+    } catch (error) {
+      await recordDiagnostic(env, { ...payload, type: 'slash_error', error: error.message, at: new Date().toISOString() });
+      return slackResponse(`Haikpheus config error: ${error.message}`);
+    }
 
     return slackResponse(messageFor(command));
   }
@@ -53,7 +57,7 @@ function waitUntil(ctx, promise) {
 
 async function health(env) {
   const checks = {
-    version: 'haikpheus-events-v3',
+    version: 'haikpheus-events-v4',
     hasSlackSigningSecret: Boolean(env.SLACK_SIGNING_SECRET),
     hasSlackBotToken: Boolean(env.SLACK_BOT_TOKEN),
     hasStateToken: Boolean(env.HAIKPHEUS_STATE_TOKEN),
@@ -97,11 +101,34 @@ async function slackEvent(rawBody, env) {
 
   const event = payload.event;
   if (payload.type !== 'event_callback' || event?.type !== 'message') return new Response('ok');
-  if (!event.user || event.subtype || event.bot_id || !event.channel || !event.ts) return new Response('ok');
+  if (!event.user || event.subtype || event.bot_id || !event.channel || !event.ts) {
+    await recordDiagnostic(env, { type: 'message_skip', reason: 'not_user_message', at: new Date().toISOString() });
+    return new Response('ok');
+  }
 
   const state = await getState(env);
-  if (!state.channels.includes(event.channel) || !state.users.includes(event.user)) return new Response('ok');
-  if (!isHaiku(event.text ?? '')) return new Response('ok');
+  if (!state.channels.includes(event.channel) || !state.users.includes(event.user)) {
+    await recordDiagnostic(env, {
+      type: 'message_skip',
+      reason: 'not_opted_in',
+      channel: event.channel,
+      user: event.user,
+      state,
+      at: new Date().toISOString()
+    });
+    return new Response('ok');
+  }
+  if (!isHaiku(event.text ?? '')) {
+    await recordDiagnostic(env, {
+      type: 'message_skip',
+      reason: 'not_haiku',
+      channel: event.channel,
+      user: event.user,
+      text: event.text ?? '',
+      at: new Date().toISOString()
+    });
+    return new Response('ok');
+  }
 
   await slack(env, 'chat.postMessage', {
     channel: event.channel,
@@ -115,6 +142,7 @@ async function slackEvent(rawBody, env) {
     unfurl_media: false
   });
   await slack(env, 'reactions.add', { channel: event.channel, timestamp: event.ts, name: 'haiku' });
+  await recordDiagnostic(env, { type: 'haiku_posted', channel: event.channel, user: event.user, at: new Date().toISOString() });
 
   return new Response('ok');
 }
