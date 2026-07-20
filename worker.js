@@ -1,6 +1,6 @@
 import { analyzeHaiku, isHaiku, syllableCounts } from './scripts/haiku.mjs';
 
-const VERSION = 'haikpheus-events-v15';
+const VERSION = 'haikpheus-events-v16';
 
 export default {
   async fetch(request, env, ctx) {

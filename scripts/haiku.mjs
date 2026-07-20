@@ -1,3 +1,5 @@
+import { SYLLABLE_COUNTS } from './syllable-counts.mjs';
+
 const SUB_SYLLABLES = [
   'cial', 'tia', 'cius', 'cious', 'uiet', 'gious', 'geous', 'priest', 'giu', 'dge',
   'ion', 'iou', 'sia$', '.che$', '.ched$', '.abe$', '.ace$', '.ade$', '.age$',
@@ -120,6 +122,7 @@ function numberWords(number) {
 
 function syllablesInWord(word) {
   if (SYLLABLE_OVERRIDES.has(word)) return SYLLABLE_OVERRIDES.get(word);
+  if (SYLLABLE_COUNTS.has(word)) return SYLLABLE_COUNTS.get(word);
 
   const parts = word.toLowerCase().split(/[^aeiouy]+/).filter(Boolean);
   let syllables = parts.length;
