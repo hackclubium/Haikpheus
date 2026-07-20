@@ -4,6 +4,7 @@ export default {
     if (request.method === 'GET' && url.pathname === '/__haikpheus/version') {
       return new Response('haikpheus-events-v2', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
     }
+    if (request.method === 'GET' && url.pathname === '/__haikpheus/health') return health(env);
     if (request.method === 'GET' && url.pathname === '/state') return stateSnapshot(request, env);
     if (request.method !== 'POST') return new Response('not found', { status: 404 });
 
@@ -26,11 +27,35 @@ export default {
       return slackResponse('Unknown command.');
     }
 
-    await updateState(env, command, form.get('channel_id'), form.get('user_id'));
+    try {
+      await updateState(env, command, form.get('channel_id'), form.get('user_id'));
+    } catch (error) {
+      return slackResponse(`Haikpheus config error: ${error.message}`);
+    }
 
     return slackResponse(messageFor(command));
   }
 };
+
+async function health(env) {
+  const checks = {
+    version: 'haikpheus-events-v2',
+    hasSlackSigningSecret: Boolean(env.SLACK_SIGNING_SECRET),
+    hasSlackBotToken: Boolean(env.SLACK_BOT_TOKEN),
+    hasStateToken: Boolean(env.HAIKPHEUS_STATE_TOKEN),
+    hasKvBinding: Boolean(env.HAIKPHEUS_STATE),
+    kvReadable: false
+  };
+
+  try {
+    await getState(env);
+    checks.kvReadable = true;
+  } catch (error) {
+    checks.kvError = error.message;
+  }
+
+  return Response.json(checks);
+}
 
 function urlVerification(rawBody) {
   try {
