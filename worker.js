@@ -1,6 +1,7 @@
-const VERSION = 'haikpheus-events-v32';
+const VERSION = 'haikpheus-events-v33';
 const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
 let haikuModule;
+let dbReady;
 const ENABLED_FLAVORS = [
   'haiku enabled!',
   'your syllables shall now be counted',
@@ -62,38 +63,9 @@ export default {
       }
     }
 
-    const form = new URLSearchParams(rawBody);
-    const command = form.get('command');
-    if (!['/haik-in', '/haik-out', '/haik-chan-in', '/haik-chan-out', '/haik-test', '/haik-debug', '/enable-haiku', '/disable-haiku'].includes(command)) {
-      return slackResponse('Unknown command.');
-    }
-
-    if (command === '/haik-test') return slackResponse(`\`\`\`json\n${JSON.stringify(analyzeHaiku(form.get('text') ?? ''), null, 2)}\n\`\`\``);
-    if (command === '/haik-debug') return slackResponse(`\`\`\`json\n${JSON.stringify(await slashDebug(env, form), null, 2)}\n\`\`\``);
-
-    const payload = { command, channel: form.get('channel_id'), user: form.get('user_id') };
-    try {
-      await updateState(env, payload.command, payload.channel, payload.user);
-      await recordSlashDiagnostic(env, { ...payload, type: 'slash_ok', at: new Date().toISOString() });
-      if (payload.command === '/haik-chan-in') waitUntil(ctx, joinChannelInBackground(env, payload));
-    } catch (error) {
-      await recordSlashDiagnostic(env, { ...payload, type: 'slash_error', error: error.message, at: new Date().toISOString() });
-      return slackResponse(`Haikpheus config error: ${error.message}`);
-    }
-
-    const joinNote = command === '/haik-chan-in' ? ' Public channels auto-join in background; private channels still need `/invite @Haikpheus`.' : '';
-    return slackResponse(`${messageFor(command)}${joinNote} (${VERSION}; saving in background; you=${payload.user}; channel=${payload.channel})`);
+    return slashCommand(rawBody, env, ctx);
   }
 };
-
-async function joinChannelInBackground(env, payload) {
-  try {
-    const joinNote = await joinChannel(env, payload.channel);
-    await recordDiagnostic(env, { ...payload, type: 'join_ok', joinNote, at: new Date().toISOString() });
-  } catch (error) {
-    await recordDiagnostic(env, { ...payload, type: 'join_error', error: error.message, at: new Date().toISOString() });
-  }
-}
 
 function waitUntil(ctx, promise) {
   if (ctx?.waitUntil) ctx.waitUntil(promise);
@@ -106,15 +78,15 @@ async function health(env) {
     hasSlackSigningSecret: Boolean(env.SLACK_SIGNING_SECRET),
     hasSlackBotToken: Boolean(env.SLACK_BOT_TOKEN),
     hasStateToken: Boolean(env.HAIKPHEUS_STATE_TOKEN),
-    hasKvBinding: Boolean(env.HAIKPHEUS_STATE),
-    kvReadable: false
+    hasD1Binding: Boolean(env.HAIKPHEUS_DB),
+    d1Readable: false
   };
 
   try {
     await getState(env);
-    checks.kvReadable = true;
+    checks.d1Readable = true;
   } catch (error) {
-    checks.kvError = error.message;
+    checks.d1Error = error.message;
   }
 
   return Response.json(checks);
@@ -122,10 +94,10 @@ async function health(env) {
 
 async function debugState(env) {
   const state = await getState(env);
-  const diagnostic = (await env.HAIKPHEUS_STATE.get('lastDiagnostic', 'json')) ?? null;
-  const messageDiagnostic = (await env.HAIKPHEUS_STATE.get('lastMessageDiagnostic', 'json')) ?? null;
-  const slashDiagnostic = (await env.HAIKPHEUS_STATE.get('lastSlashDiagnostic', 'json')) ?? null;
-  const recentMessages = (await env.HAIKPHEUS_STATE.get('recentMessageDiagnostics', 'json')) ?? [];
+  const diagnostic = (await dbGet(env, 'lastDiagnostic', 'json')) ?? null;
+  const messageDiagnostic = (await dbGet(env, 'lastMessageDiagnostic', 'json')) ?? null;
+  const slashDiagnostic = (await dbGet(env, 'lastSlashDiagnostic', 'json')) ?? null;
+  const recentMessages = (await dbGet(env, 'recentMessageDiagnostics', 'json')) ?? [];
   return Response.json({ version: VERSION, state, diagnostic, messageDiagnostic, slashDiagnostic, recentMessages });
 }
 
@@ -153,6 +125,33 @@ function analyzeRequest(url) {
   return loadHaiku().then(({ analyzeHaiku }) => Response.json(analyzeHaiku(url.searchParams.get('text') ?? '')));
 }
 
+async function slashCommand(rawBody, env, ctx) {
+  const form = new URLSearchParams(rawBody);
+  const command = form.get('command');
+  if (!['/haik-in', '/haik-out', '/haik-chan-in', '/haik-chan-out', '/haik-test', '/haik-debug', '/enable-haiku', '/disable-haiku'].includes(command)) {
+    return slackResponse('Unknown command.');
+  }
+
+  if (command === '/haik-test') {
+    const { analyzeHaiku } = await loadHaiku();
+    return slackResponse(`\`\`\`json\n${JSON.stringify(analyzeHaiku(form.get('text') ?? ''), null, 2)}\n\`\`\``);
+  }
+  if (command === '/haik-debug') return slackResponse(`\`\`\`json\n${JSON.stringify(await slashDebug(env, form), null, 2)}\n\`\`\``);
+
+  const payload = { command, channel: form.get('channel_id'), user: form.get('user_id') };
+  try {
+    await updateState(env, payload.command, payload.channel, payload.user);
+    await recordSlashDiagnostic(env, { ...payload, type: 'slash_ok', at: new Date().toISOString() });
+    if (payload.command === '/haik-chan-in') waitUntil(ctx, joinChannelInBackground(env, payload));
+  } catch (error) {
+    await recordSlashDiagnostic(env, { ...payload, type: 'slash_error', error: error.message, at: new Date().toISOString() });
+    return slackResponse(`Haikpheus config error: ${error.message}`);
+  }
+
+  const joinNote = command === '/haik-chan-in' ? ' Public channels auto-join in background; private channels still need `/invite @Haikpheus`.' : '';
+  return slackResponse(`${messageFor(command)}${joinNote} (${VERSION}; saving in background; you=${payload.user}; channel=${payload.channel})`);
+}
+
 async function slashDebug(env, form) {
   const state = await getState(env);
   return {
@@ -162,36 +161,43 @@ async function slashDebug(env, form) {
     userOptedIn: state.users.includes(form.get('user_id')),
     channelOptedIn: state.channels.includes(form.get('channel_id')),
     state,
-    lastMessage: (await env.HAIKPHEUS_STATE.get('lastMessageDiagnostic', 'json')) ?? null,
-    recentMessages: (await env.HAIKPHEUS_STATE.get('recentMessageDiagnostics', 'json')) ?? []
+    lastMessage: (await dbGet(env, 'lastMessageDiagnostic', 'json')) ?? null,
+    recentMessages: (await dbGet(env, 'recentMessageDiagnostics', 'json')) ?? []
   };
+}
+
+async function joinChannelInBackground(env, payload) {
+  try {
+    const joinNote = await joinChannel(env, payload.channel);
+    await recordDiagnostic(env, { ...payload, type: 'join_ok', joinNote, at: new Date().toISOString() });
+  } catch (error) {
+    await recordDiagnostic(env, { ...payload, type: 'join_error', error: error.message, at: new Date().toISOString() });
+  }
 }
 
 async function lastDiagnostic(request, env) {
   if (request.headers.get('authorization') !== `Bearer ${env.HAIKPHEUS_STATE_TOKEN}`) {
     return new Response('unauthorized', { status: 401 });
   }
-  return Response.json((await env.HAIKPHEUS_STATE.get('lastDiagnostic', 'json')) ?? null);
+  return Response.json((await dbGet(env, 'lastDiagnostic', 'json')) ?? null);
 }
 
-// Diagnostics are best-effort: KV writes fail hard once the free-tier daily
-// write quota is hit, and that must never take down haiku handling.
 async function recordDiagnostic(env, value) {
-  await env.HAIKPHEUS_STATE.put('lastDiagnostic', JSON.stringify(value)).catch(() => {});
+  await dbPut(env, 'lastDiagnostic', JSON.stringify(value)).catch(() => {});
 }
 
 async function recordMessageDiagnostic(env, value) {
   try {
-    await env.HAIKPHEUS_STATE.put('lastMessageDiagnostic', JSON.stringify(value));
-    const recent = (await env.HAIKPHEUS_STATE.get('recentMessageDiagnostics', 'json')) ?? [];
+    await dbPut(env, 'lastMessageDiagnostic', JSON.stringify(value));
+    const recent = (await dbGet(env, 'recentMessageDiagnostics', 'json')) ?? [];
     recent.unshift(value);
-    await env.HAIKPHEUS_STATE.put('recentMessageDiagnostics', JSON.stringify(recent.slice(0, 20)));
+    await dbPut(env, 'recentMessageDiagnostics', JSON.stringify(recent.slice(0, 20)));
   } catch {}
   await recordDiagnostic(env, value);
 }
 
 async function recordSlashDiagnostic(env, value) {
-  await env.HAIKPHEUS_STATE.put('lastSlashDiagnostic', JSON.stringify(value)).catch(() => {});
+  await dbPut(env, 'lastSlashDiagnostic', JSON.stringify(value)).catch(() => {});
   await recordDiagnostic(env, value);
 }
 
@@ -280,7 +286,7 @@ async function slackEvent(rawBody, env) {
 async function processHaikuMessage(env, message) {
   const { analyzeHaiku } = await loadHaiku();
   const processedKey = `processed:${message.channel}:${message.ts}`;
-  if (await env.HAIKPHEUS_STATE.get(processedKey)) return { ok: false, reason: 'already_seen' };
+  if (await dbGet(env, processedKey)) return { ok: false, reason: 'already_seen' };
   if ((message.reactions ?? []).some((reaction) => reaction.name === 'haiku')) return { ok: false, reason: 'already_seen' };
 
   const analysis = analyzeHaiku(message.text);
@@ -303,7 +309,7 @@ async function processHaikuMessage(env, message) {
     slack(env, 'reactions.add', { channel: message.channel, timestamp: message.ts, name: 'haiku' })
   ]);
   await markHaikued(env, message.thread_ts || message.ts).catch(() => {});
-  await env.HAIKPHEUS_STATE.put(processedKey, '1', { expirationTtl: 12 * 60 * 60 }).catch(() => {});
+  await dbPut(env, processedKey, '1', 12 * 60 * 60).catch(() => {});
   await sendOptOutHint(env, message.channel, message.user, message.thread_ts || message.ts).catch((error) => (
     recordDiagnostic(env, { type: 'hint_error', error: error.message, at: new Date().toISOString() })
   ));
@@ -326,22 +332,22 @@ async function handleThankYou(env, event) {
     thread_ts: event.thread_ts,
     text: `your gratitude warms\nthis dinosaur heart so much\nalways here for you\n---\nby <@${event.user}>`
   });
-  await env.HAIKPHEUS_STATE.delete(`haikued:${event.thread_ts}`).catch(() => {});
+  await dbDelete(env, `haikued:${event.thread_ts}`).catch(() => {});
   await recordMessageDiagnostic(env, { type: 'thank_you', channel: event.channel, user: event.user, at: new Date().toISOString() });
   return true;
 }
 
 async function markHaikued(env, threadTs) {
-  await env.HAIKPHEUS_STATE.put(`haikued:${threadTs}`, '1', { expirationTtl: 12 * 60 * 60 });
+  await dbPut(env, `haikued:${threadTs}`, '1', 12 * 60 * 60);
 }
 
 async function wasHaikued(env, threadTs) {
-  return Boolean(await env.HAIKPHEUS_STATE.get(`haikued:${threadTs}`));
+  return Boolean(await dbGet(env, `haikued:${threadTs}`));
 }
 
 async function sendOptOutHint(env, channel, user, threadTs) {
   const key = `haiku_hinted:${user}`;
-  if (await env.HAIKPHEUS_STATE.get(key)) return;
+  if (await dbGet(env, key)) return;
 
   await slack(env, 'chat.postEphemeral', {
     channel,
@@ -349,7 +355,7 @@ async function sendOptOutHint(env, channel, user, threadTs) {
     thread_ts: threadTs,
     text: "you don't want me to\nnotice and speak your poems?\n`/haik-out`"
   });
-  await env.HAIKPHEUS_STATE.put(key, '1');
+  await dbPut(env, key, '1');
 }
 
 async function stateSnapshot(request, env) {
@@ -398,11 +404,11 @@ async function updateState(env, command, channel, user) {
   }
   state.channels.sort();
   state.users.sort();
-  await env.HAIKPHEUS_STATE.put('state', JSON.stringify(state));
+  await dbPut(env, 'state', JSON.stringify(state));
 }
 
 async function getState(env) {
-  return (await env.HAIKPHEUS_STATE.get('state', 'json')) ?? { channels: [], users: [] };
+  return (await dbGet(env, 'state', 'json')) ?? { channels: [], users: [] };
 }
 
 async function slack(env, method, body) {
@@ -438,6 +444,52 @@ function add(list, value) {
 function remove(list, value) {
   const index = list.indexOf(value);
   if (index !== -1) list.splice(index, 1);
+}
+
+async function dbGet(env, key, type = 'text') {
+  await ensureDb(env);
+  const now = Math.floor(Date.now() / 1000);
+  const row = await env.HAIKPHEUS_DB
+    .prepare('SELECT value, expires_at FROM haikpheus_state WHERE key = ?')
+    .bind(key)
+    .first();
+  if (!row) return null;
+  if (row.expires_at && row.expires_at <= now) {
+    await dbDelete(env, key);
+    return null;
+  }
+  return type === 'json' ? JSON.parse(row.value) : row.value;
+}
+
+async function dbPut(env, key, value, expirationTtl = null) {
+  await ensureDb(env);
+  const expiresAt = expirationTtl ? Math.floor(Date.now() / 1000) + expirationTtl : null;
+  await env.HAIKPHEUS_DB
+    .prepare('INSERT INTO haikpheus_state (key, value, expires_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at')
+    .bind(key, value, expiresAt)
+    .run();
+}
+
+async function dbDelete(env, key) {
+  await ensureDb(env);
+  await env.HAIKPHEUS_DB
+    .prepare('DELETE FROM haikpheus_state WHERE key = ?')
+    .bind(key)
+    .run();
+}
+
+async function ensureDb(env) {
+  if (!env.HAIKPHEUS_DB) throw new Error('HAIKPHEUS_DB D1 binding is required');
+  dbReady ||= env.HAIKPHEUS_DB
+    .prepare('CREATE TABLE IF NOT EXISTS haikpheus_state (key TEXT PRIMARY KEY, value TEXT NOT NULL, expires_at INTEGER)')
+    .run()
+    .then(async () => {
+      await env.HAIKPHEUS_DB
+        .prepare('DELETE FROM haikpheus_state WHERE expires_at IS NOT NULL AND expires_at <= ?')
+        .bind(Math.floor(Date.now() / 1000))
+        .run();
+    });
+  await dbReady;
 }
 
 async function validSlackRequest(request, rawBody, secret) {

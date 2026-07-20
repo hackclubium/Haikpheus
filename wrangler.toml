@@ -2,6 +2,7 @@ name = "haikpheus"
 main = "worker.js"
 compatibility_date = "2026-07-20"
 
-kv_namespaces = [
-  { binding = "HAIKPHEUS_STATE", id = "23477985846a46c3be62fe0e2ee925e8" }
-]
+[[d1_databases]]
+binding = "HAIKPHEUS_DB"
+database_name = "haikpheus-state"
+database_id = "b57a876d-70dc-4783-a42e-c6fbf0e8b1e1"

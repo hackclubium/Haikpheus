@@ -17,7 +17,7 @@ Then it reacts with `:haiku:`.
 - GitHub Actions runs `scripts/run-haikpheus.mjs` every 6 hours and on manual dispatch as a backstop.
 - Cloudflare Worker receives Slack slash commands.
 - Cloudflare Worker receives Slack message events and posts matching haikus immediately.
-- Cloudflare KV stores opted-in Slack channel IDs and user IDs.
+- Cloudflare D1 stores opted-in Slack channel IDs, user IDs, diagnostics, and short-lived duplicate guards.
 - GitHub Actions still runs as a periodic/manual backstop.
 
 ## Slack App
@@ -74,7 +74,7 @@ Deploy `worker.js` to Cloudflare Workers with these secrets/vars:
 - `SLACK_BOT_TOKEN`: Slack bot token, starts with `xoxb-`.
 - `HAIKPHEUS_STATE_TOKEN`: same value as the GitHub secret.
 
-Bind a KV namespace named `HAIKPHEUS_STATE`. Update `wrangler.toml` with its namespace ID.
+Bind a D1 database named `HAIKPHEUS_DB`. Update `wrangler.toml` with its database ID.
 
 ## Commands
 

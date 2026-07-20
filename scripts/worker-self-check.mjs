@@ -8,18 +8,7 @@ const env = {
   SLACK_SIGNING_SECRET: 'slack-secret',
   SLACK_BOT_TOKEN: 'xoxb-test',
   HAIKPHEUS_STATE_TOKEN: 'state-secret',
-  HAIKPHEUS_STATE: {
-    async get(key, type) {
-      const value = store.get(key);
-      return type === 'json' && value ? JSON.parse(value) : value;
-    },
-    async put(key, value) {
-      store.set(key, value);
-    },
-    async delete(key) {
-      store.delete(key);
-    }
-  }
+  HAIKPHEUS_DB: fakeD1(store)
 };
 const calls = [];
 const realFetch = globalThis.fetch;
@@ -80,6 +69,7 @@ async function slashCommand(payload) {
   const response = await worker.fetch(await signedRequest(body, 'application/x-www-form-urlencoded'), env, ctx);
   assert.equal(response.status, 200);
   await Promise.all(waits.splice(0));
+  return response;
 }
 
 async function signedRequest(body, contentType) {
@@ -104,4 +94,38 @@ async function sign(secret, value) {
 
 function encode(value) {
   return new TextEncoder().encode(value);
+}
+
+function fakeD1(values) {
+  return {
+    prepare(sql) {
+      return {
+        params: [],
+        bind(...params) {
+          this.params = params;
+          return this;
+        },
+        async run() {
+          if (sql.startsWith('INSERT INTO haikpheus_state')) {
+            const [key, value, expiresAt] = this.params;
+            values.set(key, { value, expires_at: expiresAt ?? null });
+          } else if (sql.startsWith('DELETE FROM haikpheus_state WHERE key = ?')) {
+            values.delete(this.params[0]);
+          } else if (sql.startsWith('DELETE FROM haikpheus_state WHERE expires_at')) {
+            const now = this.params[0];
+            for (const [key, row] of values.entries()) {
+              if (row.expires_at && row.expires_at <= now) values.delete(key);
+            }
+          }
+          return { success: true };
+        },
+        async first() {
+          if (!sql.startsWith('SELECT value, expires_at FROM haikpheus_state')) return null;
+          const row = values.get(this.params[0]);
+          if (!row) return null;
+          return { value: row.value, expires_at: row.expires_at };
+        }
+      };
+    }
+  };
 }
