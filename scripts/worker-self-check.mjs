@@ -18,6 +18,12 @@ const env = {
     }
   }
 };
+const calls = [];
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (url, options) => {
+  calls.push({ url, body: JSON.parse(options.body) });
+  return Response.json({ ok: true, ts: '999.000' });
+};
 
 const challenge = await worker.fetch(new Request('https://haikpheus.test/', {
   method: 'POST',
@@ -36,13 +42,8 @@ await slashCommand({
   channel_id: 'C123',
   user_id: 'U123'
 });
-
-const calls = [];
-const realFetch = globalThis.fetch;
-globalThis.fetch = async (url, options) => {
-  calls.push({ url, body: JSON.parse(options.body) });
-  return Response.json({ ok: true, ts: '999.000' });
-};
+assert.equal(calls.at(-1).url, 'https://slack.com/api/conversations.join');
+calls.length = 0;
 
 const eventBody = JSON.stringify({
   type: 'event_callback',

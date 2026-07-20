@@ -24,6 +24,7 @@ Then it reacts with `:haiku:`.
 Create a Slack app with these bot scopes:
 
 - `channels:history`
+- `channels:join`
 - `channels:read`
 - `chat:write`
 - `reactions:write`
@@ -40,7 +41,11 @@ Add these slash commands, all pointing at the Worker URL:
 - `/haik-chan-in`
 - `/haik-chan-out`
 
-Invite the bot to any channel it should watch.
+`/haik-chan-in` tries to join public channels automatically. Private channels still need:
+
+```text
+/invite @Haikpheus
+```
 
 Enable Events API:
 

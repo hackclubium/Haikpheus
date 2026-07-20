@@ -1,10 +1,13 @@
+const VERSION = 'haikpheus-events-v8';
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/__haikpheus/version') {
-      return new Response('haikpheus-events-v4', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+      return new Response(VERSION, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
     }
     if (request.method === 'GET' && url.pathname === '/__haikpheus/health') return health(env);
+    if (request.method === 'GET' && url.pathname === '/__haikpheus/debug') return debugState(env);
     if (request.method === 'GET' && url.pathname === '/__haikpheus/last') return lastDiagnostic(request, env);
     if (request.method === 'GET' && url.pathname === '/state') return stateSnapshot(request, env);
     if (request.method !== 'POST') return new Response('not found', { status: 404 });
@@ -38,7 +41,9 @@ export default {
     }
 
     const payload = { command, channel: form.get('channel_id'), user: form.get('user_id') };
+    let joinNote = '';
     try {
+      if (payload.command === '/haik-chan-in') joinNote = await joinChannel(env, payload.channel);
       await updateState(env, payload.command, payload.channel, payload.user);
       await recordDiagnostic(env, { ...payload, type: 'slash_ok', at: new Date().toISOString() });
     } catch (error) {
@@ -46,7 +51,8 @@ export default {
       return slackResponse(`Haikpheus config error: ${error.message}`);
     }
 
-    return slackResponse(messageFor(command));
+    const state = await getState(env);
+    return slackResponse(`${messageFor(command)}${joinNote} (${VERSION}; channels=${state.channels.join(',') || 'none'}; users=${state.users.join(',') || 'none'})`);
   }
 };
 
@@ -57,7 +63,7 @@ function waitUntil(ctx, promise) {
 
 async function health(env) {
   const checks = {
-    version: 'haikpheus-events-v4',
+    version: VERSION,
     hasSlackSigningSecret: Boolean(env.SLACK_SIGNING_SECRET),
     hasSlackBotToken: Boolean(env.SLACK_BOT_TOKEN),
     hasStateToken: Boolean(env.HAIKPHEUS_STATE_TOKEN),
@@ -73,6 +79,12 @@ async function health(env) {
   }
 
   return Response.json(checks);
+}
+
+async function debugState(env) {
+  const state = await getState(env);
+  const diagnostic = (await env.HAIKPHEUS_STATE.get('lastDiagnostic', 'json')) ?? null;
+  return Response.json({ version: VERSION, state, diagnostic });
 }
 
 async function lastDiagnostic(request, env) {
@@ -132,6 +144,7 @@ async function slackEvent(rawBody, env) {
 
   await slack(env, 'chat.postMessage', {
     channel: event.channel,
+    thread_ts: event.ts,
     text: `${event.text}\n---\nby <@${event.user}>`,
     blocks: [
       { type: 'section', text: { type: 'mrkdwn', text: event.text } },
@@ -221,6 +234,18 @@ async function slack(env, method, body) {
   const json = await response.json();
   if (!json.ok) throw new Error(`${method}: ${json.error}`);
   return json;
+}
+
+async function joinChannel(env, channel) {
+  try {
+    await slack(env, 'conversations.join', { channel });
+    return '';
+  } catch (error) {
+    if (error.message.includes('method_not_supported_for_channel_type')) return ' Private channel: invite me manually with `/invite @Haikpheus`.';
+    if (error.message.includes('is_archived')) throw error;
+    if (error.message.includes('channel_not_found')) throw error;
+    throw error;
+  }
 }
 
 function add(list, value) {

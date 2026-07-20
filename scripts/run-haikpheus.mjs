@@ -24,6 +24,7 @@ export async function main() {
 
       await slack(token, 'chat.postMessage', {
         channel,
+        thread_ts: message.ts,
         text: `${message.text}\n---\nby <@${message.user}>`,
         blocks: [
           { type: 'section', text: { type: 'mrkdwn', text: message.text } },
