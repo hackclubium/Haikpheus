@@ -1,6 +1,6 @@
 import { analyzeHaiku, isHaiku, syllableCounts } from './scripts/haiku.mjs';
 
-const VERSION = 'haikpheus-events-v13';
+const VERSION = 'haikpheus-events-v14';
 
 export default {
   async fetch(request, env, ctx) {
@@ -47,14 +47,14 @@ export default {
     try {
       if (payload.command === '/haik-chan-in') joinNote = await joinChannel(env, payload.channel);
       await updateState(env, payload.command, payload.channel, payload.user);
-      await recordDiagnostic(env, { ...payload, type: 'slash_ok', at: new Date().toISOString() });
+      await recordSlashDiagnostic(env, { ...payload, type: 'slash_ok', at: new Date().toISOString() });
     } catch (error) {
-      await recordDiagnostic(env, { ...payload, type: 'slash_error', error: error.message, at: new Date().toISOString() });
+      await recordSlashDiagnostic(env, { ...payload, type: 'slash_error', error: error.message, at: new Date().toISOString() });
       return slackResponse(`Haikpheus config error: ${error.message}`);
     }
 
     const state = await getState(env);
-    return slackResponse(`${messageFor(command)}${joinNote} (${VERSION}; channels=${state.channels.join(',') || 'none'}; users=${state.users.join(',') || 'none'})`);
+    return slackResponse(`${messageFor(command)}${joinNote} (${VERSION}; you=${payload.user}; channel=${payload.channel}; channels=${state.channels.join(',') || 'none'}; users=${state.users.join(',') || 'none'})`);
   }
 };
 
@@ -87,7 +87,8 @@ async function debugState(env) {
   const state = await getState(env);
   const diagnostic = (await env.HAIKPHEUS_STATE.get('lastDiagnostic', 'json')) ?? null;
   const messageDiagnostic = (await env.HAIKPHEUS_STATE.get('lastMessageDiagnostic', 'json')) ?? null;
-  return Response.json({ version: VERSION, state, diagnostic, messageDiagnostic });
+  const slashDiagnostic = (await env.HAIKPHEUS_STATE.get('lastSlashDiagnostic', 'json')) ?? null;
+  return Response.json({ version: VERSION, state, diagnostic, messageDiagnostic, slashDiagnostic });
 }
 
 async function lastDiagnostic(request, env) {
@@ -103,6 +104,11 @@ async function recordDiagnostic(env, value) {
 
 async function recordMessageDiagnostic(env, value) {
   await env.HAIKPHEUS_STATE.put('lastMessageDiagnostic', JSON.stringify(value));
+  await recordDiagnostic(env, value);
+}
+
+async function recordSlashDiagnostic(env, value) {
+  await env.HAIKPHEUS_STATE.put('lastSlashDiagnostic', JSON.stringify(value));
   await recordDiagnostic(env, value);
 }
 
