@@ -1,10 +1,11 @@
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/__haikpheus/version') {
       return new Response('haikpheus-events-v2', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
     }
     if (request.method === 'GET' && url.pathname === '/__haikpheus/health') return health(env);
+    if (request.method === 'GET' && url.pathname === '/__haikpheus/last') return lastDiagnostic(request, env);
     if (request.method === 'GET' && url.pathname === '/state') return stateSnapshot(request, env);
     if (request.method !== 'POST') return new Response('not found', { status: 404 });
 
@@ -16,6 +17,7 @@ export default {
 
     const contentType = request.headers.get('content-type') ?? '';
     if (!(await validSlackRequest(request, rawBody, env.SLACK_SIGNING_SECRET))) {
+      waitUntil(ctx, recordDiagnostic(env, { type: 'invalid_signature', at: new Date().toISOString() }));
       return new Response('invalid signature', { status: 401 });
     }
 
@@ -27,15 +29,19 @@ export default {
       return slackResponse('Unknown command.');
     }
 
-    try {
-      await updateState(env, command, form.get('channel_id'), form.get('user_id'));
-    } catch (error) {
-      return slackResponse(`Haikpheus config error: ${error.message}`);
-    }
+    const payload = { command, channel: form.get('channel_id'), user: form.get('user_id') };
+    waitUntil(ctx, updateState(env, payload.command, payload.channel, payload.user)
+      .then(() => recordDiagnostic(env, { ...payload, type: 'slash_ok', at: new Date().toISOString() }))
+      .catch((error) => recordDiagnostic(env, { ...payload, type: 'slash_error', error: error.message, at: new Date().toISOString() })));
 
     return slackResponse(messageFor(command));
   }
 };
+
+function waitUntil(ctx, promise) {
+  if (ctx?.waitUntil) ctx.waitUntil(promise);
+  else promise.catch(() => {});
+}
 
 async function health(env) {
   const checks = {
@@ -55,6 +61,17 @@ async function health(env) {
   }
 
   return Response.json(checks);
+}
+
+async function lastDiagnostic(request, env) {
+  if (request.headers.get('authorization') !== `Bearer ${env.HAIKPHEUS_STATE_TOKEN}`) {
+    return new Response('unauthorized', { status: 401 });
+  }
+  return Response.json((await env.HAIKPHEUS_STATE.get('lastDiagnostic', 'json')) ?? null);
+}
+
+async function recordDiagnostic(env, value) {
+  await env.HAIKPHEUS_STATE.put('lastDiagnostic', JSON.stringify(value));
 }
 
 function urlVerification(rawBody) {

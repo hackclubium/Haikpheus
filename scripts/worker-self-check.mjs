@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import worker from '../worker.js';
 
 const store = new Map();
+const waits = [];
+const ctx = { waitUntil: (promise) => waits.push(promise) };
 const env = {
   SLACK_SIGNING_SECRET: 'slack-secret',
   SLACK_BOT_TOKEN: 'xoxb-test',
@@ -52,7 +54,7 @@ const eventBody = JSON.stringify({
     text: 'autumn rain falls down\nsoft rivers are flowing slow\nnight birds sing softly'
   }
 });
-const eventPost = await worker.fetch(await signedRequest(eventBody, 'application/json'), env);
+const eventPost = await worker.fetch(await signedRequest(eventBody, 'application/json'), env, ctx);
 globalThis.fetch = realFetch;
 
 assert.equal(eventPost.status, 200);
@@ -69,8 +71,9 @@ console.log('ok');
 
 async function slashCommand(payload) {
   const body = new URLSearchParams(payload).toString();
-  const response = await worker.fetch(await signedRequest(body, 'application/x-www-form-urlencoded'), env);
+  const response = await worker.fetch(await signedRequest(body, 'application/x-www-form-urlencoded'), env, ctx);
   assert.equal(response.status, 200);
+  await Promise.all(waits.splice(0));
 }
 
 async function signedRequest(body, contentType) {
