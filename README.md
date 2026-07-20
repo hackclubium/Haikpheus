@@ -13,7 +13,8 @@ Then it reacts with `:haiku:`.
 
 ## Shape
 
-- GitHub Actions runs `scripts/run-haikpheus.mjs` on every push and every 6 hours.
+- GitHub Actions runs local checks on every push.
+- GitHub Actions runs `scripts/run-haikpheus.mjs` every 6 hours and on manual dispatch as a backstop.
 - Cloudflare Worker receives Slack slash commands.
 - Cloudflare Worker receives Slack message events and posts matching haikus immediately.
 - Cloudflare KV stores opted-in Slack channel IDs and user IDs.

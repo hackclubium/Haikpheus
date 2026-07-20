@@ -54,10 +54,12 @@ export default {
     }
 
     if (contentType.includes('application/json')) {
-      waitUntil(ctx, slackEvent(rawBody, env).catch((error) => (
-        recordDiagnostic(env, { type: 'event_error', error: error.message, at: new Date().toISOString() })
-      )));
-      return new Response('ok');
+      try {
+        return await slackEvent(rawBody, env);
+      } catch (error) {
+        await recordDiagnostic(env, { type: 'event_error', error: error.message, at: new Date().toISOString() });
+        return new Response('ok');
+      }
     }
 
     const form = new URLSearchParams(rawBody);
@@ -199,7 +201,6 @@ function urlVerification(rawBody) {
 }
 
 async function slackEvent(rawBody, env) {
-  const { analyzeHaiku, syllableCounts } = await loadHaiku();
   const payload = JSON.parse(rawBody);
   if (payload.type === 'url_verification') return Response.json({ challenge: payload.challenge });
 
@@ -211,7 +212,6 @@ async function slackEvent(rawBody, env) {
     channel: event?.channel,
     user: event?.user,
     text: event?.text ?? '',
-    counts: syllableCounts(event?.text ?? ''),
     at: new Date().toISOString()
   });
   if (payload.type !== 'event_callback' || event?.type !== 'message') return new Response('ok');

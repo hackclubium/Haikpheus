@@ -7,7 +7,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  check:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run check
+
   run:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read

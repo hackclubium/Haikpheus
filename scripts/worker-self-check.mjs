@@ -59,14 +59,14 @@ const eventBody = JSON.stringify({
   }
 });
 const eventPost = await worker.fetch(await signedRequest(eventBody, 'application/json'), env, ctx);
-await Promise.all(waits.splice(0));
-globalThis.fetch = realFetch;
 
 assert.equal(eventPost.status, 200);
 assert.equal(calls.length, 3);
 assert.equal(calls[0].url, 'https://slack.com/api/chat.postMessage');
 assert.equal(calls[1].url, 'https://slack.com/api/reactions.add');
 assert.equal(calls[2].url, 'https://slack.com/api/chat.postEphemeral');
+await Promise.all(waits.splice(0));
+globalThis.fetch = realFetch;
 
 const get = await worker.fetch(new Request('https://haikpheus.test/state', {
   headers: { authorization: 'Bearer state-secret' }
