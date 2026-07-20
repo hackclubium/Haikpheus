@@ -2,7 +2,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/__haikpheus/version') {
-      return new Response('haikpheus-events-v2', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+      return new Response('haikpheus-events-v3', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
     }
     if (request.method === 'GET' && url.pathname === '/__haikpheus/health') return health(env);
     if (request.method === 'GET' && url.pathname === '/__haikpheus/last') return lastDiagnostic(request, env);
@@ -10,6 +10,14 @@ export default {
     if (request.method !== 'POST') return new Response('not found', { status: 404 });
 
     const rawBody = await request.text();
+    waitUntil(ctx, recordDiagnostic(env, {
+      type: 'post_seen',
+      at: new Date().toISOString(),
+      path: url.pathname,
+      contentType: request.headers.get('content-type') ?? '',
+      bodyStart: rawBody.slice(0, 80)
+    }));
+
     const verification = urlVerification(rawBody);
     if (verification) {
       return new Response(verification, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
@@ -18,7 +26,7 @@ export default {
     const contentType = request.headers.get('content-type') ?? '';
     if (!(await validSlackRequest(request, rawBody, env.SLACK_SIGNING_SECRET))) {
       waitUntil(ctx, recordDiagnostic(env, { type: 'invalid_signature', at: new Date().toISOString() }));
-      return new Response('invalid signature', { status: 401 });
+      return slackResponse('Haikpheus received this command, but Slack signature verification failed. Check Worker SLACK_SIGNING_SECRET.');
     }
 
     if (contentType.includes('application/json')) return slackEvent(rawBody, env);
@@ -45,7 +53,7 @@ function waitUntil(ctx, promise) {
 
 async function health(env) {
   const checks = {
-    version: 'haikpheus-events-v2',
+    version: 'haikpheus-events-v3',
     hasSlackSigningSecret: Boolean(env.SLACK_SIGNING_SECRET),
     hasSlackBotToken: Boolean(env.SLACK_BOT_TOKEN),
     hasStateToken: Boolean(env.HAIKPHEUS_STATE_TOKEN),
