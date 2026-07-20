@@ -49,8 +49,9 @@ export function isHaiku(text) {
 
 export function analyzeHaiku(text) {
   if (typeof text !== 'string') return { ok: false, lines: [], counts: [] };
+  if (/```|`/.test(text)) return { ok: false, lines: [], counts: [], reason: 'code' };
 
-  const explicitLines = text.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const explicitLines = stripSlackNoise(text).trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (explicitLines.length === 3) {
     const counts = explicitLines.map((line) => cleanedWords(line).reduce((sum, word) => sum + syllablesInWord(word), 0));
     return { ok: counts.every((count, index) => count === TARGETS[index]), lines: explicitLines, counts };
@@ -84,13 +85,27 @@ export function syllableCounts(text) {
 }
 
 function cleanedWords(text) {
-  return normalizeNumbers(text)
+  return normalizeNumbers(stripSlackNoise(text))
     .toLowerCase()
     .replace(/\$/g, ' dollar ')
     .replace(/\bise\b/g, 'ize')
+    .replace(/\b([a-z]+)'s\b/g, '$1')
+    .replace(/\b([a-z]+)'ll\b/g, '$1 will')
+    .replace(/\b([a-z]+)'re\b/g, '$1 are')
+    .replace(/\b([a-z]+)'ve\b/g, '$1 have')
+    .replace(/\b([a-z]+)n't\b/g, '$1 not')
     .replace(/[^a-z\s']/g, ' ')
     .split(/\s+/)
+    .map((word) => word.replace(/^'+|'+$/g, ''))
     .filter(Boolean);
+}
+
+function stripSlackNoise(text) {
+  return text
+    .replace(/<https?:\/\/[^|>]+\|([^>]+)>/g, '$1')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/<[@#!][A-Z0-9][^>]*>/g, ' ')
+    .replace(/<![^>]+>/g, ' ');
 }
 
 function normalizeNumbers(text) {
@@ -121,14 +136,27 @@ function numberWords(number) {
 }
 
 function syllablesInWord(word) {
-  if (SYLLABLE_OVERRIDES.has(word)) return SYLLABLE_OVERRIDES.get(word);
-  if (SYLLABLE_COUNTS.has(word)) return SYLLABLE_COUNTS.get(word);
+  const dictionaryWord = dictionaryForm(word);
+  if (SYLLABLE_OVERRIDES.has(dictionaryWord)) return SYLLABLE_OVERRIDES.get(dictionaryWord);
+  if (SYLLABLE_COUNTS.has(dictionaryWord)) return SYLLABLE_COUNTS.get(dictionaryWord);
 
-  const parts = word.toLowerCase().split(/[^aeiouy]+/).filter(Boolean);
+  const parts = dictionaryWord.toLowerCase().split(/[^aeiouy]+/).filter(Boolean);
   let syllables = parts.length;
 
-  for (const pattern of SUB_SYLLABLES) if (pattern.test(word)) syllables -= 1;
-  for (const pattern of ADD_SYLLABLES) if (pattern.test(word)) syllables += 1;
+  for (const pattern of SUB_SYLLABLES) if (pattern.test(dictionaryWord)) syllables -= 1;
+  for (const pattern of ADD_SYLLABLES) if (pattern.test(dictionaryWord)) syllables += 1;
 
   return Math.max(1, syllables);
+}
+
+function dictionaryForm(word) {
+  if (SYLLABLE_COUNTS.has(word) || SYLLABLE_OVERRIDES.has(word)) return word;
+
+  for (const suffix of ['ies', 'es', 's']) {
+    if (!word.endsWith(suffix) || word.length <= suffix.length + 1) continue;
+    const stem = suffix === 'ies' ? `${word.slice(0, -3)}y` : word.slice(0, -suffix.length);
+    if (SYLLABLE_COUNTS.has(stem) || SYLLABLE_OVERRIDES.has(stem)) return stem;
+  }
+
+  return word;
 }
