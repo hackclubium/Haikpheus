@@ -1,0 +1,23 @@
+name: Haikpheus
+
+on:
+  push:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/run-haikpheus.mjs
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          HAIKPHEUS_STATE_URL: ${{ secrets.HAIKPHEUS_STATE_URL }}
+          HAIKPHEUS_STATE_TOKEN: ${{ secrets.HAIKPHEUS_STATE_TOKEN }}
