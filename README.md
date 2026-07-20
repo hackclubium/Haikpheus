@@ -46,7 +46,7 @@ Invite the bot to any channel it should watch.
 Set repository secret:
 
 - `SLACK_BOT_TOKEN`: Slack bot token, starts with `xoxb-`.
-- `HAIKPHEUS_STATE_URL`: Worker state endpoint, for example `https://haikpheus.example.workers.dev/state`.
+- `HAIKPHEUS_STATE_URL`: Worker URL, for example `https://haikpheus.example.workers.dev`. `/state` is added automatically when omitted.
 - `HAIKPHEUS_STATE_TOKEN`: shared secret used by GitHub Actions to read Worker state.
 
 ## Worker Secrets

@@ -51,10 +51,13 @@ function syllablesInWord(word) {
 }
 
 async function getState() {
-  const response = await fetch(mustEnv('HAIKPHEUS_STATE_URL'), {
+  const url = new URL(mustEnv('HAIKPHEUS_STATE_URL'));
+  if (url.pathname === '/') url.pathname = '/state';
+
+  const response = await fetch(url, {
     headers: { authorization: `Bearer ${mustEnv('HAIKPHEUS_STATE_TOKEN')}` }
   });
-  if (!response.ok) throw new Error(`state fetch failed: ${response.status}`);
+  if (!response.ok) throw new Error(`state fetch failed: ${response.status} ${url}`);
   return response.json();
 }
 
