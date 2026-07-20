@@ -1,4 +1,4 @@
-const VERSION = 'haikpheus-events-v31';
+const VERSION = 'haikpheus-events-v32';
 const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
 let haikuModule;
 const ENABLED_FLAVORS = [
@@ -174,20 +174,24 @@ async function lastDiagnostic(request, env) {
   return Response.json((await env.HAIKPHEUS_STATE.get('lastDiagnostic', 'json')) ?? null);
 }
 
+// Diagnostics are best-effort: KV writes fail hard once the free-tier daily
+// write quota is hit, and that must never take down haiku handling.
 async function recordDiagnostic(env, value) {
-  await env.HAIKPHEUS_STATE.put('lastDiagnostic', JSON.stringify(value));
+  await env.HAIKPHEUS_STATE.put('lastDiagnostic', JSON.stringify(value)).catch(() => {});
 }
 
 async function recordMessageDiagnostic(env, value) {
-  await env.HAIKPHEUS_STATE.put('lastMessageDiagnostic', JSON.stringify(value));
-  const recent = (await env.HAIKPHEUS_STATE.get('recentMessageDiagnostics', 'json')) ?? [];
-  recent.unshift(value);
-  await env.HAIKPHEUS_STATE.put('recentMessageDiagnostics', JSON.stringify(recent.slice(0, 20)));
+  try {
+    await env.HAIKPHEUS_STATE.put('lastMessageDiagnostic', JSON.stringify(value));
+    const recent = (await env.HAIKPHEUS_STATE.get('recentMessageDiagnostics', 'json')) ?? [];
+    recent.unshift(value);
+    await env.HAIKPHEUS_STATE.put('recentMessageDiagnostics', JSON.stringify(recent.slice(0, 20)));
+  } catch {}
   await recordDiagnostic(env, value);
 }
 
 async function recordSlashDiagnostic(env, value) {
-  await env.HAIKPHEUS_STATE.put('lastSlashDiagnostic', JSON.stringify(value));
+  await env.HAIKPHEUS_STATE.put('lastSlashDiagnostic', JSON.stringify(value)).catch(() => {});
   await recordDiagnostic(env, value);
 }
 
@@ -298,8 +302,8 @@ async function processHaikuMessage(env, message) {
     }),
     slack(env, 'reactions.add', { channel: message.channel, timestamp: message.ts, name: 'haiku' })
   ]);
-  await markHaikued(env, message.thread_ts || message.ts);
-  await env.HAIKPHEUS_STATE.put(processedKey, '1', { expirationTtl: 12 * 60 * 60 });
+  await markHaikued(env, message.thread_ts || message.ts).catch(() => {});
+  await env.HAIKPHEUS_STATE.put(processedKey, '1', { expirationTtl: 12 * 60 * 60 }).catch(() => {});
   await sendOptOutHint(env, message.channel, message.user, message.thread_ts || message.ts).catch((error) => (
     recordDiagnostic(env, { type: 'hint_error', error: error.message, at: new Date().toISOString() })
   ));
@@ -315,13 +319,14 @@ async function handleThankYou(env, event) {
   if (!event.thread_ts || !THANK_YOU_PATTERN.test(event.text ?? '')) return false;
   if (!(await wasHaikued(env, event.thread_ts))) return false;
 
-  await slack(env, 'reactions.add', { channel: event.channel, timestamp: event.ts, name: 'heart' });
+  // reactions.add failing (e.g. already_reacted on a Slack retry) shouldn't block the reply
+  await slack(env, 'reactions.add', { channel: event.channel, timestamp: event.ts, name: 'heart' }).catch(() => {});
   await slack(env, 'chat.postMessage', {
     channel: event.channel,
     thread_ts: event.thread_ts,
     text: `your gratitude warms\nthis dinosaur heart so much\nalways here for you\n---\nby <@${event.user}>`
   });
-  await env.HAIKPHEUS_STATE.delete(`haikued:${event.thread_ts}`);
+  await env.HAIKPHEUS_STATE.delete(`haikued:${event.thread_ts}`).catch(() => {});
   await recordMessageDiagnostic(env, { type: 'thank_you', channel: event.channel, user: event.user, at: new Date().toISOString() });
   return true;
 }
