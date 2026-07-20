@@ -1,4 +1,4 @@
-const VERSION = 'haikpheus-events-v11';
+const VERSION = 'haikpheus-events-v12';
 
 export default {
   async fetch(request, env, ctx) {
@@ -84,7 +84,8 @@ async function health(env) {
 async function debugState(env) {
   const state = await getState(env);
   const diagnostic = (await env.HAIKPHEUS_STATE.get('lastDiagnostic', 'json')) ?? null;
-  return Response.json({ version: VERSION, state, diagnostic });
+  const messageDiagnostic = (await env.HAIKPHEUS_STATE.get('lastMessageDiagnostic', 'json')) ?? null;
+  return Response.json({ version: VERSION, state, diagnostic, messageDiagnostic });
 }
 
 async function lastDiagnostic(request, env) {
@@ -96,6 +97,11 @@ async function lastDiagnostic(request, env) {
 
 async function recordDiagnostic(env, value) {
   await env.HAIKPHEUS_STATE.put('lastDiagnostic', JSON.stringify(value));
+}
+
+async function recordMessageDiagnostic(env, value) {
+  await env.HAIKPHEUS_STATE.put('lastMessageDiagnostic', JSON.stringify(value));
+  await recordDiagnostic(env, value);
 }
 
 function urlVerification(rawBody) {
@@ -130,7 +136,7 @@ async function slackEvent(rawBody, env) {
 
   const state = await getState(env);
   if (!state.channels.includes(event.channel) || !state.users.includes(event.user)) {
-    await recordDiagnostic(env, {
+    await recordMessageDiagnostic(env, {
       type: 'message_skip',
       reason: 'not_opted_in',
       channel: event.channel,
@@ -141,7 +147,7 @@ async function slackEvent(rawBody, env) {
     return new Response('ok');
   }
   if (!isHaiku(event.text ?? '')) {
-    await recordDiagnostic(env, {
+    await recordMessageDiagnostic(env, {
       type: 'message_skip',
       reason: 'not_haiku',
       channel: event.channel,
@@ -166,7 +172,7 @@ async function slackEvent(rawBody, env) {
     unfurl_media: false
   });
   await slack(env, 'reactions.add', { channel: event.channel, timestamp: event.ts, name: 'haiku' });
-  await recordDiagnostic(env, { type: 'haiku_posted', channel: event.channel, user: event.user, at: new Date().toISOString() });
+  await recordMessageDiagnostic(env, { type: 'haiku_posted', channel: event.channel, user: event.user, at: new Date().toISOString() });
 
   return new Response('ok');
 }
