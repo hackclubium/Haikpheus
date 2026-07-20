@@ -111,8 +111,7 @@ function stripSlackNoise(text) {
 function normalizeNumbers(text) {
   return text.replace(/:?\b\d{1,6}\b:?/g, (token) => {
     const digits = token.replaceAll(':', '');
-    const normalized = token.startsWith(':') && token.endsWith(':') ? digits.slice(-2) : digits;
-    return numberWords(Number(normalized));
+    return numberWords(Number(digits));
   });
 }
 
@@ -129,7 +128,7 @@ function numberWords(number) {
   }
 
   if (number < 1000) {
-    return [numberWords(Math.floor(number / 100)), 'hundred', number % 100 ? numberWords(number % 100) : ''].filter(Boolean).join(' ');
+    return [numberWords(Math.floor(number / 100)), 'hundred', number % 100 ? `and ${numberWords(number % 100)}` : ''].filter(Boolean).join(' ');
   }
 
   return [numberWords(Math.floor(number / 1000)), 'thousand', number % 1000 ? numberWords(number % 1000) : ''].filter(Boolean).join(' ');

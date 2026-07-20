@@ -1,6 +1,6 @@
 import { analyzeHaiku, syllableCounts } from './scripts/haiku.mjs';
 
-const VERSION = 'haikpheus-events-v22';
+const VERSION = 'haikpheus-events-v23';
 const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
 const ENABLED_FLAVORS = [
   'haiku enabled!',
