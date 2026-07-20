@@ -59,6 +59,7 @@ const eventBody = JSON.stringify({
   }
 });
 const eventPost = await worker.fetch(await signedRequest(eventBody, 'application/json'), env, ctx);
+await Promise.all(waits.splice(0));
 globalThis.fetch = realFetch;
 
 assert.equal(eventPost.status, 200);

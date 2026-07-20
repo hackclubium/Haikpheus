@@ -1,4 +1,4 @@
-const VERSION = 'haikpheus-events-v28';
+const VERSION = 'haikpheus-events-v30';
 const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
 let haikuModule;
 const ENABLED_FLAVORS = [
@@ -52,7 +52,12 @@ export default {
       return slackResponse('Haikpheus received this command, but Slack signature verification failed. Check Worker SLACK_SIGNING_SECRET.');
     }
 
-    if (contentType.includes('application/json')) return slackEvent(rawBody, env);
+    if (contentType.includes('application/json')) {
+      waitUntil(ctx, slackEvent(rawBody, env).catch((error) => (
+        recordDiagnostic(env, { type: 'event_error', error: error.message, at: new Date().toISOString() })
+      )));
+      return new Response('ok');
+    }
 
     const form = new URLSearchParams(rawBody);
     const command = form.get('command');
@@ -213,51 +218,71 @@ async function slackEvent(rawBody, env) {
     return new Response('ok');
   }
 
-  const analysis = analyzeHaiku(event.text ?? '');
-  if (!analysis.ok) {
+  const result = await processHaikuMessage(env, {
+    channel: event.channel,
+    user: event.user,
+    ts: event.ts,
+    text: event.text ?? '',
+    thread_ts: event.thread_ts,
+    reactions: []
+  });
+  if (!result.ok) {
     await recordMessageDiagnostic(env, {
       type: 'message_skip',
-      reason: 'not_haiku',
+      reason: result.reason,
       channel: event.channel,
       user: event.user,
       text: event.text ?? '',
-      counts: analysis.counts,
-      lines: analysis.lines,
+      counts: result.analysis?.counts ?? [],
+      lines: result.analysis?.lines ?? [],
       at: new Date().toISOString()
     });
     return new Response('ok');
   }
-  const haiku = analysis.lines.join('\n');
-
-  await Promise.all([
-    slack(env, 'chat.postMessage', {
-      channel: event.channel,
-      thread_ts: event.ts,
-      text: `${haiku}\n---\n– a haiku by <@${event.user}>, ${new Date().getUTCFullYear()}`,
-      blocks: [
-        { type: 'section', text: { type: 'mrkdwn', text: haiku } },
-        { type: 'divider' },
-        { type: 'context', elements: [{ type: 'mrkdwn', text: `– a haiku by <@${event.user}>, ${new Date().getUTCFullYear()}` }] }
-      ],
-      unfurl_links: false,
-      unfurl_media: false
-    }),
-    slack(env, 'reactions.add', { channel: event.channel, timestamp: event.ts, name: 'haiku' })
-  ]);
-  await markHaikued(env, event.thread_ts || event.ts);
-  await sendOptOutHint(env, event.channel, event.user, event.thread_ts || event.ts).catch((error) => (
-    recordDiagnostic(env, { type: 'hint_error', error: error.message, at: new Date().toISOString() })
-  ));
   await recordMessageDiagnostic(env, {
     type: 'haiku_posted',
     channel: event.channel,
     user: event.user,
-    lines: analysis.lines,
-    counts: analysis.counts,
+    source: 'event',
+    lines: result.analysis.lines,
+    counts: result.analysis.counts,
     at: new Date().toISOString()
   });
 
   return new Response('ok');
+}
+
+async function processHaikuMessage(env, message) {
+  const { analyzeHaiku } = await loadHaiku();
+  const processedKey = `processed:${message.channel}:${message.ts}`;
+  if (await env.HAIKPHEUS_STATE.get(processedKey)) return { ok: false, reason: 'already_seen' };
+  if ((message.reactions ?? []).some((reaction) => reaction.name === 'haiku')) return { ok: false, reason: 'already_seen' };
+
+  const analysis = analyzeHaiku(message.text);
+  if (!analysis.ok) return { ok: false, reason: 'not_haiku', analysis };
+
+  const haiku = analysis.lines.join('\n');
+  await Promise.all([
+    slack(env, 'chat.postMessage', {
+      channel: message.channel,
+      thread_ts: message.ts,
+      text: `${haiku}\n---\n– a haiku by <@${message.user}>, ${new Date().getUTCFullYear()}`,
+      blocks: [
+        { type: 'section', text: { type: 'mrkdwn', text: haiku } },
+        { type: 'divider' },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: `– a haiku by <@${message.user}>, ${new Date().getUTCFullYear()}` }] }
+      ],
+      unfurl_links: false,
+      unfurl_media: false
+    }),
+    slack(env, 'reactions.add', { channel: message.channel, timestamp: message.ts, name: 'haiku' })
+  ]);
+  await markHaikued(env, message.thread_ts || message.ts);
+  await env.HAIKPHEUS_STATE.put(processedKey, '1', { expirationTtl: 12 * 60 * 60 });
+  await sendOptOutHint(env, message.channel, message.user, message.thread_ts || message.ts).catch((error) => (
+    recordDiagnostic(env, { type: 'hint_error', error: error.message, at: new Date().toISOString() })
+  ));
+  return { ok: true, analysis };
 }
 
 function loadHaiku() {
