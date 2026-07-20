@@ -47,8 +47,31 @@ export function isHaiku(text) {
 }
 
 function syllables(line) {
-  const words = line.toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) ?? [];
+  const words = normalizeNumbers(line).toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) ?? [];
   return words.reduce((sum, word) => sum + syllablesInWord(word), 0);
+}
+
+function normalizeNumbers(line) {
+  return line.replace(/:?\b\d{1,6}\b:?/g, (token) => numberWords(Number(token.replaceAll(':', ''))));
+}
+
+function numberWords(number) {
+  if (number < 20) return [
+    'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+    'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
+    'seventeen', 'eighteen', 'nineteen'
+  ][number];
+
+  if (number < 100) {
+    const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+    return [tens[Math.floor(number / 10)], number % 10 ? numberWords(number % 10) : ''].filter(Boolean).join(' ');
+  }
+
+  if (number < 1000) {
+    return [numberWords(Math.floor(number / 100)), 'hundred', number % 100 ? numberWords(number % 100) : ''].filter(Boolean).join(' ');
+  }
+
+  return [numberWords(Math.floor(number / 1000)), 'thousand', number % 1000 ? numberWords(number % 1000) : ''].filter(Boolean).join(' ');
 }
 
 function syllablesInWord(word) {

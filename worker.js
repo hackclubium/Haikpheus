@@ -1,4 +1,4 @@
-const VERSION = 'haikpheus-events-v8';
+const VERSION = 'haikpheus-events-v10';
 
 export default {
   async fetch(request, env, ctx) {
@@ -112,6 +112,16 @@ async function slackEvent(rawBody, env) {
   if (payload.type === 'url_verification') return Response.json({ challenge: payload.challenge });
 
   const event = payload.event;
+  await recordDiagnostic(env, {
+    type: 'event_seen',
+    payloadType: payload.type,
+    eventType: event?.type,
+    channel: event?.channel,
+    user: event?.user,
+    text: event?.text ?? '',
+    counts: syllableCounts(event?.text ?? ''),
+    at: new Date().toISOString()
+  });
   if (payload.type !== 'event_callback' || event?.type !== 'message') return new Response('ok');
   if (!event.user || event.subtype || event.bot_id || !event.channel || !event.ts) {
     await recordDiagnostic(env, { type: 'message_skip', reason: 'not_user_message', at: new Date().toISOString() });
@@ -137,6 +147,7 @@ async function slackEvent(rawBody, env) {
       channel: event.channel,
       user: event.user,
       text: event.text ?? '',
+      counts: syllableCounts(event.text ?? ''),
       at: new Date().toISOString()
     });
     return new Response('ok');
@@ -206,14 +217,45 @@ async function getState(env) {
 }
 
 function isHaiku(text) {
-  const lines = text.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = haikuLines(text);
   if (lines.length !== 3) return false;
   return [5, 7, 5].every((count, index) => syllables(lines[index]) === count);
 }
 
+function syllableCounts(text) {
+  return haikuLines(text).map((line) => syllables(line));
+}
+
+function haikuLines(text) {
+  return text.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
 function syllables(line) {
-  const words = line.toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) ?? [];
+  const words = normalizeNumbers(line).toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) ?? [];
   return words.reduce((sum, word) => sum + syllablesInWord(word), 0);
+}
+
+function normalizeNumbers(line) {
+  return line.replace(/:?\b\d{1,6}\b:?/g, (token) => numberWords(Number(token.replaceAll(':', ''))));
+}
+
+function numberWords(number) {
+  if (number < 20) return [
+    'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+    'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
+    'seventeen', 'eighteen', 'nineteen'
+  ][number];
+
+  if (number < 100) {
+    const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+    return [tens[Math.floor(number / 10)], number % 10 ? numberWords(number % 10) : ''].filter(Boolean).join(' ');
+  }
+
+  if (number < 1000) {
+    return [numberWords(Math.floor(number / 100)), 'hundred', number % 100 ? numberWords(number % 100) : ''].filter(Boolean).join(' ');
+  }
+
+  return [numberWords(Math.floor(number / 1000)), 'thousand', number % 1000 ? numberWords(number % 1000) : ''].filter(Boolean).join(' ');
 }
 
 function syllablesInWord(word) {
