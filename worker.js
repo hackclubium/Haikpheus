@@ -1,4 +1,4 @@
-const VERSION = 'haikpheus-events-v30';
+const VERSION = 'haikpheus-events-v31';
 const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
 let haikuModule;
 const ENABLED_FLAVORS = [
@@ -27,6 +27,7 @@ export default {
     }
     if (request.method === 'GET' && url.pathname === '/__haikpheus/health') return health(env);
     if (request.method === 'GET' && url.pathname === '/__haikpheus/debug') return debugState(env);
+    if (request.method === 'GET' && url.pathname === '/__haikpheus/slack-debug') return slackDebug(env);
     if (request.method === 'GET' && url.pathname === '/__haikpheus/analyze') return analyzeRequest(url);
     if (request.method === 'GET' && url.pathname === '/__haikpheus/last') return lastDiagnostic(request, env);
     if (request.method === 'GET' && url.pathname === '/state') return stateSnapshot(request, env);
@@ -124,6 +125,26 @@ async function debugState(env) {
   const slashDiagnostic = (await env.HAIKPHEUS_STATE.get('lastSlashDiagnostic', 'json')) ?? null;
   const recentMessages = (await env.HAIKPHEUS_STATE.get('recentMessageDiagnostics', 'json')) ?? [];
   return Response.json({ version: VERSION, state, diagnostic, messageDiagnostic, slashDiagnostic, recentMessages });
+}
+
+async function slackDebug(env) {
+  const state = await getState(env);
+  const channels = [];
+
+  for (const channel of state.channels) {
+    const info = await slack(env, 'conversations.info', { channel }).catch((error) => ({ error: error.message }));
+    channels.push({
+      id: channel,
+      ok: Boolean(info.channel),
+      name: info.channel?.name,
+      isChannel: info.channel?.is_channel,
+      isGroup: info.channel?.is_group,
+      isMember: info.channel?.is_member,
+      error: info.error
+    });
+  }
+
+  return Response.json({ version: VERSION, channels });
 }
 
 function analyzeRequest(url) {
