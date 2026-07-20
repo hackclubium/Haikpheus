@@ -4,6 +4,7 @@ import worker from '../worker.js';
 const store = new Map();
 const env = {
   SLACK_SIGNING_SECRET: 'slack-secret',
+  SLACK_BOT_TOKEN: 'xoxb-test',
   HAIKPHEUS_STATE_TOKEN: 'state-secret',
   HAIKPHEUS_STATE: {
     async get(key, type) {
@@ -16,32 +17,75 @@ const env = {
   }
 };
 
-const body = new URLSearchParams({
+const challenge = await worker.fetch(new Request('https://haikpheus.test/', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ type: 'url_verification', challenge: 'abc123' })
+}), env);
+assert.equal(await challenge.text(), 'abc123');
+
+await slashCommand({
   command: '/haik-in',
   channel_id: 'C123',
   user_id: 'U123'
-}).toString();
+});
+await slashCommand({
+  command: '/haik-chan-in',
+  channel_id: 'C123',
+  user_id: 'U123'
+});
 
-const timestamp = Math.floor(Date.now() / 1000).toString();
-const signature = await sign(env.SLACK_SIGNING_SECRET, `v0:${timestamp}:${body}`);
-const post = await worker.fetch(new Request('https://haikpheus.test/slack', {
-  method: 'POST',
-  headers: {
-    'content-type': 'application/x-www-form-urlencoded',
-    'x-slack-request-timestamp': timestamp,
-    'x-slack-signature': signature
-  },
-  body
-}), env);
+const calls = [];
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (url, options) => {
+  calls.push({ url, body: JSON.parse(options.body) });
+  return Response.json({ ok: true, ts: '999.000' });
+};
 
-assert.equal(post.status, 200);
+const eventBody = JSON.stringify({
+  type: 'event_callback',
+  event: {
+    type: 'message',
+    channel: 'C123',
+    user: 'U123',
+    ts: '123.456',
+    text: 'autumn rain falls down\nsoft rivers are flowing slow\nnight birds sing softly'
+  }
+});
+const eventPost = await worker.fetch(await signedRequest(eventBody, 'application/json'), env);
+globalThis.fetch = realFetch;
+
+assert.equal(eventPost.status, 200);
+assert.equal(calls.length, 2);
+assert.equal(calls[0].url, 'https://slack.com/api/chat.postMessage');
+assert.equal(calls[1].url, 'https://slack.com/api/reactions.add');
 
 const get = await worker.fetch(new Request('https://haikpheus.test/state', {
   headers: { authorization: 'Bearer state-secret' }
 }), env);
 
-assert.deepEqual(await get.json(), { channels: [], users: ['U123'] });
+assert.deepEqual(await get.json(), { channels: ['C123'], users: ['U123'] });
 console.log('ok');
+
+async function slashCommand(payload) {
+  const body = new URLSearchParams(payload).toString();
+  const response = await worker.fetch(await signedRequest(body, 'application/x-www-form-urlencoded'), env);
+  assert.equal(response.status, 200);
+}
+
+async function signedRequest(body, contentType) {
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const signature = await sign(env.SLACK_SIGNING_SECRET, `v0:${timestamp}:${body}`);
+  return new Request('https://haikpheus.test/slack', {
+    method: 'POST',
+    headers: {
+      'content-type': contentType,
+      'x-slack-request-timestamp': timestamp,
+      'x-slack-signature': signature
+    },
+    body
+  });
+}
 
 async function sign(secret, value) {
   const key = await crypto.subtle.importKey('raw', encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
