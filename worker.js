@@ -1,6 +1,7 @@
 import { analyzeHaiku, syllableCounts } from './scripts/haiku.mjs';
 
-const VERSION = 'haikpheus-events-v17';
+const VERSION = 'haikpheus-events-v18';
+const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
 
 export default {
   async fetch(request, env, ctx) {
@@ -142,6 +143,8 @@ async function slackEvent(rawBody, env) {
     return new Response('ok');
   }
 
+  if (await handleThankYou(env, event)) return new Response('ok');
+
   const state = await getState(env);
   if (!state.channels.includes(event.channel) || !state.users.includes(event.user)) {
     await recordMessageDiagnostic(env, {
@@ -154,6 +157,11 @@ async function slackEvent(rawBody, env) {
     });
     return new Response('ok');
   }
+  if ((event.text ?? '').length > 300) {
+    await recordMessageDiagnostic(env, { type: 'message_skip', reason: 'too_long', channel: event.channel, user: event.user, at: new Date().toISOString() });
+    return new Response('ok');
+  }
+
   const analysis = analyzeHaiku(event.text ?? '');
   if (!analysis.ok) {
     await recordMessageDiagnostic(env, {
@@ -183,6 +191,10 @@ async function slackEvent(rawBody, env) {
     unfurl_media: false
   });
   await slack(env, 'reactions.add', { channel: event.channel, timestamp: event.ts, name: 'haiku' });
+  await markHaikued(env, event.thread_ts || event.ts);
+  await sendOptOutHint(env, event.channel, event.user, event.thread_ts || event.ts).catch((error) => (
+    recordDiagnostic(env, { type: 'hint_error', error: error.message, at: new Date().toISOString() })
+  ));
   await recordMessageDiagnostic(env, {
     type: 'haiku_posted',
     channel: event.channel,
@@ -193,6 +205,42 @@ async function slackEvent(rawBody, env) {
   });
 
   return new Response('ok');
+}
+
+async function handleThankYou(env, event) {
+  if (!event.thread_ts || !THANK_YOU_PATTERN.test(event.text ?? '')) return false;
+  if (!(await wasHaikued(env, event.thread_ts))) return false;
+
+  await slack(env, 'reactions.add', { channel: event.channel, timestamp: event.ts, name: 'heart' });
+  await slack(env, 'chat.postMessage', {
+    channel: event.channel,
+    thread_ts: event.thread_ts,
+    text: `your gratitude warms\nthis dinosaur heart so much\nalways here for you\n---\nby <@${event.user}>`
+  });
+  await env.HAIKPHEUS_STATE.delete(`haikued:${event.thread_ts}`);
+  await recordMessageDiagnostic(env, { type: 'thank_you', channel: event.channel, user: event.user, at: new Date().toISOString() });
+  return true;
+}
+
+async function markHaikued(env, threadTs) {
+  await env.HAIKPHEUS_STATE.put(`haikued:${threadTs}`, '1', { expirationTtl: 12 * 60 * 60 });
+}
+
+async function wasHaikued(env, threadTs) {
+  return Boolean(await env.HAIKPHEUS_STATE.get(`haikued:${threadTs}`));
+}
+
+async function sendOptOutHint(env, channel, user, threadTs) {
+  const key = `haiku_hinted:${user}`;
+  if (await env.HAIKPHEUS_STATE.get(key)) return;
+
+  await slack(env, 'chat.postEphemeral', {
+    channel,
+    user,
+    thread_ts: threadTs,
+    text: "you don't want me to\nnotice and speak your poems?\n`/haik-out`"
+  });
+  await env.HAIKPHEUS_STATE.put(key, '1');
 }
 
 async function stateSnapshot(request, env) {

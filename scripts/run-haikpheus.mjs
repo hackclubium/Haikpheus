@@ -20,6 +20,7 @@ export async function main() {
 
     for (const message of messages.messages ?? []) {
       if (!message.user || !state.users.includes(message.user) || message.subtype) continue;
+      if ((message.text ?? '').length > 300) continue;
       const analysis = analyzeHaiku(message.text ?? '');
       if (!analysis.ok) continue;
       if ((message.reactions ?? []).some((reaction) => reaction.name === haikuReaction)) continue;
