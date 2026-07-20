@@ -1,7 +1,6 @@
-import { analyzeHaiku, syllableCounts } from './scripts/haiku.mjs';
-
-const VERSION = 'haikpheus-events-v24';
+const VERSION = 'haikpheus-events-v25';
 const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
+let haikuModule;
 const ENABLED_FLAVORS = [
   'haiku enabled!',
   'your syllables shall now be counted',
@@ -118,7 +117,7 @@ async function debugState(env) {
 }
 
 function analyzeRequest(url) {
-  return Response.json(analyzeHaiku(url.searchParams.get('text') ?? ''));
+  return loadHaiku().then(({ analyzeHaiku }) => Response.json(analyzeHaiku(url.searchParams.get('text') ?? '')));
 }
 
 async function lastDiagnostic(request, env) {
@@ -155,6 +154,7 @@ function urlVerification(rawBody) {
 }
 
 async function slackEvent(rawBody, env) {
+  const { analyzeHaiku, syllableCounts } = await loadHaiku();
   const payload = JSON.parse(rawBody);
   if (payload.type === 'url_verification') return Response.json({ challenge: payload.challenge });
 
@@ -239,6 +239,11 @@ async function slackEvent(rawBody, env) {
   });
 
   return new Response('ok');
+}
+
+function loadHaiku() {
+  haikuModule ||= import('./scripts/haiku.mjs');
+  return haikuModule;
 }
 
 async function handleThankYou(env, event) {
