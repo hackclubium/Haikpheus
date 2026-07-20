@@ -9,7 +9,13 @@ export async function main() {
   const state = await getState();
 
   for (const channel of state.channels) {
-    const messages = await slack(token, 'conversations.history', { channel, limit: 50 });
+    const messages = await slack(token, 'conversations.history', { channel, limit: 50 }).catch((error) => {
+      if (error.message.includes('not_in_channel') || error.message.includes('channel_not_found')) {
+        console.warn(`Skipping ${channel}: ${error.message}`);
+        return { messages: [] };
+      }
+      throw error;
+    });
 
     for (const message of messages.messages ?? []) {
       if (!message.user || !state.users.includes(message.user) || message.subtype) continue;
