@@ -85,6 +85,16 @@ Bind a D1 database named `HAIKPHEUS_DB`. Update `wrangler.toml` with its databas
 
 Users are off by default. Channels are off until `/haik-chan-in` runs.
 
+## Thread Replies
+
+After Haikpheus posts a haiku, replies in that thread can trigger one more short response. Supported phrases include:
+
+- `thank you`, `thanks`, `tanx`, `thx`, `ty`, `thx haik`, `appreciate it`, `much appreciated`, `cheers`, `props`, `kudos`, `bless`
+- `haik`, `haiku`, `poetry`, `poem`, `bard`, `syllable`, `syllables`, `chef's kiss`, `peak`
+- `beautiful`, `nice haiku`, `good bot`, `well done`, `love this`, `you rock`, `great job`, `nailed it`
+- `wow`, `whoa`, `woah`, `omg`, `no way`, `wait that's a haiku`, `how did you catch that`
+- `ily`, `love you`, `luv u`, `you're the best`, `ur the best`
+
 ## Local Checks
 
 ```sh

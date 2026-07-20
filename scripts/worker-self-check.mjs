@@ -55,13 +55,37 @@ assert.equal(calls[0].url, 'https://slack.com/api/chat.postMessage');
 assert.equal(calls[1].url, 'https://slack.com/api/reactions.add');
 assert.equal(calls[2].url, 'https://slack.com/api/chat.postEphemeral');
 await Promise.all(waits.splice(0));
-globalThis.fetch = realFetch;
+
+calls.length = 0;
+const thanksBody = JSON.stringify({
+  type: 'event_callback',
+  event: {
+    type: 'message',
+    channel: 'C123',
+    user: 'U123',
+    ts: '124.456',
+    thread_ts: '123.456',
+    text: 'thx haik'
+  }
+});
+const thanksPost = await worker.fetch(await signedRequest(thanksBody, 'application/json'), env, ctx);
+
+assert.equal(thanksPost.status, 200);
+assert.equal(calls.length, 2);
+assert.equal(calls[0].url, 'https://slack.com/api/reactions.add');
+assert.deepEqual(calls[0].body, { channel: 'C123', timestamp: '124.456', name: 'heart' });
+assert.equal(calls[1].url, 'https://slack.com/api/chat.postMessage');
+assert.equal(calls[1].body.channel, 'C123');
+assert.equal(calls[1].body.thread_ts, '123.456');
+assert.match(calls[1].body.text, /---\nby <@U123>$/);
+assert.notEqual(calls[1].body.text, 'your gratitude warms\nthis dinosaur heart so much\nalways here for you\n---\nby <@U123>');
 
 const get = await worker.fetch(new Request('https://haikpheus.test/state', {
   headers: { authorization: 'Bearer state-secret' }
 }), env);
 
 assert.deepEqual(await get.json(), { channels: ['C123'], users: ['U123'] });
+globalThis.fetch = realFetch;
 console.log('ok');
 
 async function slashCommand(payload) {

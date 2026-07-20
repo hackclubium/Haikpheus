@@ -1,5 +1,31 @@
 const VERSION = 'haikpheus-events-v33';
-const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
+const TRIGGER_RESPONSES = [
+  {
+    name: 'haiku_meta',
+    pattern: /\b(haik|haiku|poetry|poem|bard|syllables?|chef'?s kiss|peak)\b/i,
+    text: 'syllables bloom bright\nhaikpheus heard the small song\nthread gently glows'
+  },
+  {
+    name: 'thanks',
+    pattern: /\b(thank\s*you|thanks|tanx|thx|ty|appreciate\s+(it|you)|much appreciated|cheers|props|kudos|bless)\b/i,
+    text: 'your gratitude warms\nthis dinosaur heart so much\nalways here for you'
+  },
+  {
+    name: 'praise',
+    pattern: /\b(beautiful|nice haiku|good bot|well done|love this|you rock|great job|nailed it)\b/i,
+    text: 'small words found their wings\nseventeen steps in moonlight\nand now we all glow'
+  },
+  {
+    name: 'surprise',
+    pattern: /\b(wow|whoa|woah|omg|no way|wait (that'?s|thats) a haiku|how did you catch that)\b/i,
+    text: 'surprise in the thread\nhidden poems wake and wave\ncaught between the lines'
+  },
+  {
+    name: 'affection',
+    pattern: /\b(ily|love you|luv u|you'?re the best|ur the best)\b/i,
+    text: 'tiny robot heart\nkeeps a warm place in the thread\nfor your gentle words'
+  }
+];
 let haikuModule;
 let dbReady;
 const ENABLED_FLAVORS = [
@@ -322,7 +348,8 @@ function loadHaiku() {
 }
 
 async function handleThankYou(env, event) {
-  if (!event.thread_ts || !THANK_YOU_PATTERN.test(event.text ?? '')) return false;
+  const trigger = thankYouTrigger(event.text ?? '');
+  if (!event.thread_ts || !trigger) return false;
   if (!(await wasHaikued(env, event.thread_ts))) return false;
 
   // reactions.add failing (e.g. already_reacted on a Slack retry) shouldn't block the reply
@@ -330,11 +357,15 @@ async function handleThankYou(env, event) {
   await slack(env, 'chat.postMessage', {
     channel: event.channel,
     thread_ts: event.thread_ts,
-    text: `your gratitude warms\nthis dinosaur heart so much\nalways here for you\n---\nby <@${event.user}>`
+    text: `${trigger.text}\n---\nby <@${event.user}>`
   });
   await dbDelete(env, `haikued:${event.thread_ts}`).catch(() => {});
-  await recordMessageDiagnostic(env, { type: 'thank_you', channel: event.channel, user: event.user, at: new Date().toISOString() });
+  await recordMessageDiagnostic(env, { type: 'thank_you', trigger: trigger.name, channel: event.channel, user: event.user, at: new Date().toISOString() });
   return true;
+}
+
+function thankYouTrigger(text) {
+  return TRIGGER_RESPONSES.find((trigger) => trigger.pattern.test(text));
 }
 
 async function markHaikued(env, threadTs) {
