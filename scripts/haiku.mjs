@@ -25,6 +25,22 @@ const ADD_SYLLABLES = [
 
 const TARGETS = [5, 7, 5];
 
+const SYLLABLE_OVERRIDES = new Map(Object.entries({
+  are: 1,
+  one: 1,
+  two: 1,
+  three: 1,
+  four: 1,
+  five: 1,
+  six: 1,
+  eight: 1,
+  nine: 1,
+  ten: 1,
+  twelve: 1,
+  rivers: 2,
+  flowing: 2
+}));
+
 export function isHaiku(text) {
   return analyzeHaiku(text).ok;
 }
@@ -103,6 +119,8 @@ function numberWords(number) {
 }
 
 function syllablesInWord(word) {
+  if (SYLLABLE_OVERRIDES.has(word)) return SYLLABLE_OVERRIDES.get(word);
+
   const parts = word.toLowerCase().split(/[^aeiouy]+/).filter(Boolean);
   let syllables = parts.length;
 

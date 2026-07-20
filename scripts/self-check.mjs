@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { analyzeHaiku, isHaiku } from './haiku.mjs';
 
 assert.equal(isHaiku('autumn rain falls down\ngentle rivers flowing slow\nnight birds sing softly'), true);
+assert.equal(isHaiku('autumn rain falls down\nsoft rivers are flowing slow\nnight birds sing softly'), true);
 assert.equal(isHaiku(':77:\ngentle rivers flowing slow\nnight birds sing softly'), true);
 assert.equal(isHaiku(':101777:\ngentle rivers flowing slow\nnight birds sing softly'), true);
 assert.equal(isHaiku(':101777: gentle rivers flowing slow night birds sing softly'), true);
