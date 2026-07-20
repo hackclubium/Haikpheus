@@ -2,6 +2,7 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy --config wrangler.toml",
+    "haik-test": "node scripts/haik-test.mjs",
     "check": "node --check worker.js && node --check scripts/run-haikpheus.mjs && node scripts/self-check.mjs && node scripts/worker-self-check.mjs"
   },
   "devDependencies": {

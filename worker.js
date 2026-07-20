@@ -1,6 +1,6 @@
 import { analyzeHaiku, syllableCounts } from './scripts/haiku.mjs';
 
-const VERSION = 'haikpheus-events-v20';
+const VERSION = 'haikpheus-events-v21';
 const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
 const ENABLED_FLAVORS = [
   'haiku enabled!',
@@ -28,6 +28,7 @@ export default {
     }
     if (request.method === 'GET' && url.pathname === '/__haikpheus/health') return health(env);
     if (request.method === 'GET' && url.pathname === '/__haikpheus/debug') return debugState(env);
+    if (request.method === 'GET' && url.pathname === '/__haikpheus/analyze') return analyzeRequest(url);
     if (request.method === 'GET' && url.pathname === '/__haikpheus/last') return lastDiagnostic(request, env);
     if (request.method === 'GET' && url.pathname === '/state') return stateSnapshot(request, env);
     if (request.method !== 'POST') return new Response('not found', { status: 404 });
@@ -56,9 +57,11 @@ export default {
 
     const form = new URLSearchParams(rawBody);
     const command = form.get('command');
-    if (!['/haik-in', '/haik-out', '/haik-chan-in', '/haik-chan-out', '/enable-haiku', '/disable-haiku'].includes(command)) {
+    if (!['/haik-in', '/haik-out', '/haik-chan-in', '/haik-chan-out', '/haik-test', '/enable-haiku', '/disable-haiku'].includes(command)) {
       return slackResponse('Unknown command.');
     }
+
+    if (command === '/haik-test') return slackResponse(`\`\`\`json\n${JSON.stringify(analyzeHaiku(form.get('text') ?? ''), null, 2)}\n\`\`\``);
 
     const payload = { command, channel: form.get('channel_id'), user: form.get('user_id') };
     let joinNote = '';
@@ -107,6 +110,10 @@ async function debugState(env) {
   const messageDiagnostic = (await env.HAIKPHEUS_STATE.get('lastMessageDiagnostic', 'json')) ?? null;
   const slashDiagnostic = (await env.HAIKPHEUS_STATE.get('lastSlashDiagnostic', 'json')) ?? null;
   return Response.json({ version: VERSION, state, diagnostic, messageDiagnostic, slashDiagnostic });
+}
+
+function analyzeRequest(url) {
+  return Response.json(analyzeHaiku(url.searchParams.get('text') ?? ''));
 }
 
 async function lastDiagnostic(request, env) {

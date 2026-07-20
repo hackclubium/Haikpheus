@@ -40,6 +40,7 @@ Add these slash commands, all pointing at the Worker URL:
 - `/haik-out`
 - `/haik-chan-in`
 - `/haik-chan-out`
+- `/haik-test` to show detector output for text, for example `/haik-test :101777: gentle rivers flowing slow night birds sing softly`
 - `/enable-haiku` optional Orpheus-compatible alias for `/haik-in`
 - `/disable-haiku` optional Orpheus-compatible alias for `/haik-out`
 
