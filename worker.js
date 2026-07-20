@@ -1,4 +1,4 @@
-const VERSION = 'haikpheus-events-v26';
+const VERSION = 'haikpheus-events-v27';
 const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
 let haikuModule;
 const ENABLED_FLAVORS = [
@@ -64,8 +64,11 @@ export default {
 
     const payload = { command, channel: form.get('channel_id'), user: form.get('user_id') };
     try {
-      waitUntil(ctx, handleSlashCommand(env, payload));
+      await updateState(env, payload.command, payload.channel, payload.user);
+      await recordSlashDiagnostic(env, { ...payload, type: 'slash_ok', at: new Date().toISOString() });
+      if (payload.command === '/haik-chan-in') waitUntil(ctx, joinChannelInBackground(env, payload));
     } catch (error) {
+      await recordSlashDiagnostic(env, { ...payload, type: 'slash_error', error: error.message, at: new Date().toISOString() });
       return slackResponse(`Haikpheus config error: ${error.message}`);
     }
 
@@ -74,20 +77,12 @@ export default {
   }
 };
 
-async function handleSlashCommand(env, payload) {
+async function joinChannelInBackground(env, payload) {
   try {
-    await updateState(env, payload.command, payload.channel, payload.user);
-    await recordSlashDiagnostic(env, { ...payload, type: 'slash_ok', at: new Date().toISOString() });
-    if (payload.command === '/haik-chan-in') {
-      try {
-        const joinNote = await joinChannel(env, payload.channel);
-        await recordDiagnostic(env, { ...payload, type: 'join_ok', joinNote, at: new Date().toISOString() });
-      } catch (error) {
-        await recordDiagnostic(env, { ...payload, type: 'join_error', error: error.message, at: new Date().toISOString() });
-      }
-    }
+    const joinNote = await joinChannel(env, payload.channel);
+    await recordDiagnostic(env, { ...payload, type: 'join_ok', joinNote, at: new Date().toISOString() });
   } catch (error) {
-    await recordSlashDiagnostic(env, { ...payload, type: 'slash_error', error: error.message, at: new Date().toISOString() });
+    await recordDiagnostic(env, { ...payload, type: 'join_error', error: error.message, at: new Date().toISOString() });
   }
 }
 
