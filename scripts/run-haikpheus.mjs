@@ -1,5 +1,5 @@
 import { pathToFileURL } from 'node:url';
-import { isHaiku } from './haiku.mjs';
+import { analyzeHaiku } from './haiku.mjs';
 
 const haikuReaction = 'haiku';
 
@@ -20,15 +20,17 @@ export async function main() {
 
     for (const message of messages.messages ?? []) {
       if (!message.user || !state.users.includes(message.user) || message.subtype) continue;
-      if (!isHaiku(message.text ?? '')) continue;
+      const analysis = analyzeHaiku(message.text ?? '');
+      if (!analysis.ok) continue;
       if ((message.reactions ?? []).some((reaction) => reaction.name === haikuReaction)) continue;
+      const haiku = analysis.lines.join('\n');
 
       await slack(token, 'chat.postMessage', {
         channel,
         thread_ts: message.ts,
-        text: `${message.text}\n---\nby <@${message.user}>`,
+        text: `${haiku}\n---\nby <@${message.user}>`,
         blocks: [
-          { type: 'section', text: { type: 'mrkdwn', text: message.text } },
+          { type: 'section', text: { type: 'mrkdwn', text: haiku } },
           { type: 'divider' },
           { type: 'context', elements: [{ type: 'mrkdwn', text: `by <@${message.user}>` }] }
         ],

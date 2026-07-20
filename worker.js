@@ -1,6 +1,6 @@
-import { analyzeHaiku, isHaiku, syllableCounts } from './scripts/haiku.mjs';
+import { analyzeHaiku, syllableCounts } from './scripts/haiku.mjs';
 
-const VERSION = 'haikpheus-events-v16';
+const VERSION = 'haikpheus-events-v17';
 
 export default {
   async fetch(request, env, ctx) {
@@ -154,8 +154,8 @@ async function slackEvent(rawBody, env) {
     });
     return new Response('ok');
   }
-  if (!isHaiku(event.text ?? '')) {
-    const analysis = analyzeHaiku(event.text ?? '');
+  const analysis = analyzeHaiku(event.text ?? '');
+  if (!analysis.ok) {
     await recordMessageDiagnostic(env, {
       type: 'message_skip',
       reason: 'not_haiku',
@@ -168,13 +168,14 @@ async function slackEvent(rawBody, env) {
     });
     return new Response('ok');
   }
+  const haiku = analysis.lines.join('\n');
 
   await slack(env, 'chat.postMessage', {
     channel: event.channel,
     thread_ts: event.ts,
-    text: `${event.text}\n---\nby <@${event.user}>`,
+    text: `${haiku}\n---\nby <@${event.user}>`,
     blocks: [
-      { type: 'section', text: { type: 'mrkdwn', text: event.text } },
+      { type: 'section', text: { type: 'mrkdwn', text: haiku } },
       { type: 'divider' },
       { type: 'context', elements: [{ type: 'mrkdwn', text: `by <@${event.user}>` }] }
     ],
@@ -182,7 +183,14 @@ async function slackEvent(rawBody, env) {
     unfurl_media: false
   });
   await slack(env, 'reactions.add', { channel: event.channel, timestamp: event.ts, name: 'haiku' });
-  await recordMessageDiagnostic(env, { type: 'haiku_posted', channel: event.channel, user: event.user, at: new Date().toISOString() });
+  await recordMessageDiagnostic(env, {
+    type: 'haiku_posted',
+    channel: event.channel,
+    user: event.user,
+    lines: analysis.lines,
+    counts: analysis.counts,
+    at: new Date().toISOString()
+  });
 
   return new Response('ok');
 }
