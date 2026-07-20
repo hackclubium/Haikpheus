@@ -137,7 +137,7 @@ function numberWords(number) {
 function syllablesInWord(word) {
   const dictionaryWord = dictionaryForm(word);
   if (SYLLABLE_OVERRIDES.has(dictionaryWord)) return SYLLABLE_OVERRIDES.get(dictionaryWord);
-  if (SYLLABLE_COUNTS.has(dictionaryWord)) return SYLLABLE_COUNTS.get(dictionaryWord);
+  if (dictionaryWord in SYLLABLE_COUNTS) return SYLLABLE_COUNTS[dictionaryWord];
 
   const parts = dictionaryWord.toLowerCase().split(/[^aeiouy]+/).filter(Boolean);
   let syllables = parts.length;
@@ -149,12 +149,12 @@ function syllablesInWord(word) {
 }
 
 function dictionaryForm(word) {
-  if (SYLLABLE_COUNTS.has(word) || SYLLABLE_OVERRIDES.has(word)) return word;
+  if (word in SYLLABLE_COUNTS || SYLLABLE_OVERRIDES.has(word)) return word;
 
   for (const suffix of ['ies', 'es', 's']) {
     if (!word.endsWith(suffix) || word.length <= suffix.length + 1) continue;
     const stem = suffix === 'ies' ? `${word.slice(0, -3)}y` : word.slice(0, -suffix.length);
-    if (SYLLABLE_COUNTS.has(stem) || SYLLABLE_OVERRIDES.has(stem)) return stem;
+    if (stem in SYLLABLE_COUNTS || SYLLABLE_OVERRIDES.has(stem)) return stem;
   }
 
   return word;

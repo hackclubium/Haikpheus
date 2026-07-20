@@ -1,6 +1,6 @@
 import { analyzeHaiku, syllableCounts } from './scripts/haiku.mjs';
 
-const VERSION = 'haikpheus-events-v23';
+const VERSION = 'haikpheus-events-v24';
 const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
 const ENABLED_FLAVORS = [
   'haiku enabled!',
@@ -64,10 +64,13 @@ export default {
     if (command === '/haik-test') return slackResponse(`\`\`\`json\n${JSON.stringify(analyzeHaiku(form.get('text') ?? ''), null, 2)}\n\`\`\``);
 
     const payload = { command, channel: form.get('channel_id'), user: form.get('user_id') };
-    let joinNote = '';
     try {
-      if (payload.command === '/haik-chan-in') joinNote = await joinChannel(env, payload.channel);
       await updateState(env, payload.command, payload.channel, payload.user);
+      if (payload.command === '/haik-chan-in') {
+        waitUntil(ctx, joinChannel(env, payload.channel)
+          .then((joinNote) => recordDiagnostic(env, { ...payload, type: 'join_ok', joinNote, at: new Date().toISOString() }))
+          .catch((error) => recordDiagnostic(env, { ...payload, type: 'join_error', error: error.message, at: new Date().toISOString() })));
+      }
       await recordSlashDiagnostic(env, { ...payload, type: 'slash_ok', at: new Date().toISOString() });
     } catch (error) {
       await recordSlashDiagnostic(env, { ...payload, type: 'slash_error', error: error.message, at: new Date().toISOString() });
@@ -75,6 +78,7 @@ export default {
     }
 
     const state = await getState(env);
+    const joinNote = command === '/haik-chan-in' ? ' Public channels auto-join in background; private channels still need `/invite @Haikpheus`.' : '';
     return slackResponse(`${messageFor(command)}${joinNote} (${VERSION}; you=${payload.user}; channel=${payload.channel}; channels=${state.channels.join(',') || 'none'}; users=${state.users.join(',') || 'none'})`);
   }
 };
@@ -206,19 +210,21 @@ async function slackEvent(rawBody, env) {
   }
   const haiku = analysis.lines.join('\n');
 
-  await slack(env, 'chat.postMessage', {
-    channel: event.channel,
-    thread_ts: event.ts,
-    text: `${haiku}\n---\n– a haiku by <@${event.user}>, ${new Date().getUTCFullYear()}`,
-    blocks: [
-      { type: 'section', text: { type: 'mrkdwn', text: haiku } },
-      { type: 'divider' },
-      { type: 'context', elements: [{ type: 'mrkdwn', text: `– a haiku by <@${event.user}>, ${new Date().getUTCFullYear()}` }] }
-    ],
-    unfurl_links: false,
-    unfurl_media: false
-  });
-  await slack(env, 'reactions.add', { channel: event.channel, timestamp: event.ts, name: 'haiku' });
+  await Promise.all([
+    slack(env, 'chat.postMessage', {
+      channel: event.channel,
+      thread_ts: event.ts,
+      text: `${haiku}\n---\n– a haiku by <@${event.user}>, ${new Date().getUTCFullYear()}`,
+      blocks: [
+        { type: 'section', text: { type: 'mrkdwn', text: haiku } },
+        { type: 'divider' },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: `– a haiku by <@${event.user}>, ${new Date().getUTCFullYear()}` }] }
+      ],
+      unfurl_links: false,
+      unfurl_media: false
+    }),
+    slack(env, 'reactions.add', { channel: event.channel, timestamp: event.ts, name: 'haiku' })
+  ]);
   await markHaikued(env, event.thread_ts || event.ts);
   await sendOptOutHint(env, event.channel, event.user, event.thread_ts || event.ts).catch((error) => (
     recordDiagnostic(env, { type: 'hint_error', error: error.message, at: new Date().toISOString() })
