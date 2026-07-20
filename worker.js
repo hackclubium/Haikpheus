@@ -1,4 +1,4 @@
-const VERSION = 'haikpheus-events-v10';
+const VERSION = 'haikpheus-events-v11';
 
 export default {
   async fetch(request, env, ctx) {
@@ -236,7 +236,11 @@ function syllables(line) {
 }
 
 function normalizeNumbers(line) {
-  return line.replace(/:?\b\d{1,6}\b:?/g, (token) => numberWords(Number(token.replaceAll(':', ''))));
+  return line.replace(/:?\b\d{1,6}\b:?/g, (token) => {
+    const digits = token.replaceAll(':', '');
+    const normalized = token.startsWith(':') && token.endsWith(':') ? digits.slice(-2) : digits;
+    return numberWords(Number(normalized));
+  });
 }
 
 function numberWords(number) {
