@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import { isHaiku } from './haiku.mjs';
 
 const haikuReaction = 'haiku';
 
@@ -38,50 +39,6 @@ export async function main() {
       await slack(token, 'reactions.add', { channel, timestamp: message.ts, name: haikuReaction });
     }
   }
-}
-
-export function isHaiku(text) {
-  const lines = text.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (lines.length !== 3) return false;
-  return [5, 7, 5].every((count, index) => syllables(lines[index]) === count);
-}
-
-function syllables(line) {
-  const words = normalizeNumbers(line).toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) ?? [];
-  return words.reduce((sum, word) => sum + syllablesInWord(word), 0);
-}
-
-function normalizeNumbers(line) {
-  return line.replace(/:?\b\d{1,6}\b:?/g, (token) => {
-    const digits = token.replaceAll(':', '');
-    const normalized = token.startsWith(':') && token.endsWith(':') ? digits.slice(-2) : digits;
-    return numberWords(Number(normalized));
-  });
-}
-
-function numberWords(number) {
-  if (number < 20) return [
-    'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
-    'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
-    'seventeen', 'eighteen', 'nineteen'
-  ][number];
-
-  if (number < 100) {
-    const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
-    return [tens[Math.floor(number / 10)], number % 10 ? numberWords(number % 10) : ''].filter(Boolean).join(' ');
-  }
-
-  if (number < 1000) {
-    return [numberWords(Math.floor(number / 100)), 'hundred', number % 100 ? numberWords(number % 100) : ''].filter(Boolean).join(' ');
-  }
-
-  return [numberWords(Math.floor(number / 1000)), 'thousand', number % 1000 ? numberWords(number % 1000) : ''].filter(Boolean).join(' ');
-}
-
-function syllablesInWord(word) {
-  const normalized = word.replace(/(?:e|ed|es)$/, '');
-  const groups = normalized.match(/[aeiouy]+/g)?.length ?? 0;
-  return Math.max(1, groups);
 }
 
 async function getState() {

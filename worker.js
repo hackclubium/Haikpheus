@@ -1,4 +1,6 @@
-const VERSION = 'haikpheus-events-v12';
+import { analyzeHaiku, isHaiku, syllableCounts } from './scripts/haiku.mjs';
+
+const VERSION = 'haikpheus-events-v13';
 
 export default {
   async fetch(request, env, ctx) {
@@ -147,13 +149,15 @@ async function slackEvent(rawBody, env) {
     return new Response('ok');
   }
   if (!isHaiku(event.text ?? '')) {
+    const analysis = analyzeHaiku(event.text ?? '');
     await recordMessageDiagnostic(env, {
       type: 'message_skip',
       reason: 'not_haiku',
       channel: event.channel,
       user: event.user,
       text: event.text ?? '',
-      counts: syllableCounts(event.text ?? ''),
+      counts: analysis.counts,
+      lines: analysis.lines,
       at: new Date().toISOString()
     });
     return new Response('ok');
@@ -220,58 +224,6 @@ async function updateState(env, command, channel, user) {
 
 async function getState(env) {
   return (await env.HAIKPHEUS_STATE.get('state', 'json')) ?? { channels: [], users: [] };
-}
-
-function isHaiku(text) {
-  const lines = haikuLines(text);
-  if (lines.length !== 3) return false;
-  return [5, 7, 5].every((count, index) => syllables(lines[index]) === count);
-}
-
-function syllableCounts(text) {
-  return haikuLines(text).map((line) => syllables(line));
-}
-
-function haikuLines(text) {
-  return text.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-}
-
-function syllables(line) {
-  const words = normalizeNumbers(line).toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) ?? [];
-  return words.reduce((sum, word) => sum + syllablesInWord(word), 0);
-}
-
-function normalizeNumbers(line) {
-  return line.replace(/:?\b\d{1,6}\b:?/g, (token) => {
-    const digits = token.replaceAll(':', '');
-    const normalized = token.startsWith(':') && token.endsWith(':') ? digits.slice(-2) : digits;
-    return numberWords(Number(normalized));
-  });
-}
-
-function numberWords(number) {
-  if (number < 20) return [
-    'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
-    'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
-    'seventeen', 'eighteen', 'nineteen'
-  ][number];
-
-  if (number < 100) {
-    const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
-    return [tens[Math.floor(number / 10)], number % 10 ? numberWords(number % 10) : ''].filter(Boolean).join(' ');
-  }
-
-  if (number < 1000) {
-    return [numberWords(Math.floor(number / 100)), 'hundred', number % 100 ? numberWords(number % 100) : ''].filter(Boolean).join(' ');
-  }
-
-  return [numberWords(Math.floor(number / 1000)), 'thousand', number % 1000 ? numberWords(number % 1000) : ''].filter(Boolean).join(' ');
-}
-
-function syllablesInWord(word) {
-  const normalized = word.replace(/(?:e|ed|es)$/, '');
-  const groups = normalized.match(/[aeiouy]+/g)?.length ?? 0;
-  return Math.max(1, groups);
 }
 
 async function slack(env, method, body) {

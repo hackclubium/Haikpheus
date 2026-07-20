@@ -52,7 +52,7 @@ const eventBody = JSON.stringify({
     channel: 'C123',
     user: 'U123',
     ts: '123.456',
-    text: 'autumn rain falls down\nsoft rivers are flowing slow\nnight birds sing softly'
+    text: 'autumn rain falls down\ngentle rivers flowing slow\nnight birds sing softly'
   }
 });
 const eventPost = await worker.fetch(await signedRequest(eventBody, 'application/json'), env, ctx);
