@@ -1,4 +1,4 @@
-const VERSION = 'haikpheus-events-v27';
+const VERSION = 'haikpheus-events-v28';
 const THANK_YOU_PATTERN = /thank\s*you|thanks|tanx|thx|ty/i;
 let haikuModule;
 const ENABLED_FLAVORS = [
@@ -56,11 +56,12 @@ export default {
 
     const form = new URLSearchParams(rawBody);
     const command = form.get('command');
-    if (!['/haik-in', '/haik-out', '/haik-chan-in', '/haik-chan-out', '/haik-test', '/enable-haiku', '/disable-haiku'].includes(command)) {
+    if (!['/haik-in', '/haik-out', '/haik-chan-in', '/haik-chan-out', '/haik-test', '/haik-debug', '/enable-haiku', '/disable-haiku'].includes(command)) {
       return slackResponse('Unknown command.');
     }
 
     if (command === '/haik-test') return slackResponse(`\`\`\`json\n${JSON.stringify(analyzeHaiku(form.get('text') ?? ''), null, 2)}\n\`\`\``);
+    if (command === '/haik-debug') return slackResponse(`\`\`\`json\n${JSON.stringify(await slashDebug(env, form), null, 2)}\n\`\`\``);
 
     const payload = { command, channel: form.get('channel_id'), user: form.get('user_id') };
     try {
@@ -122,6 +123,20 @@ async function debugState(env) {
 
 function analyzeRequest(url) {
   return loadHaiku().then(({ analyzeHaiku }) => Response.json(analyzeHaiku(url.searchParams.get('text') ?? '')));
+}
+
+async function slashDebug(env, form) {
+  const state = await getState(env);
+  return {
+    version: VERSION,
+    slashUser: form.get('user_id'),
+    slashChannel: form.get('channel_id'),
+    userOptedIn: state.users.includes(form.get('user_id')),
+    channelOptedIn: state.channels.includes(form.get('channel_id')),
+    state,
+    lastMessage: (await env.HAIKPHEUS_STATE.get('lastMessageDiagnostic', 'json')) ?? null,
+    recentMessages: (await env.HAIKPHEUS_STATE.get('recentMessageDiagnostics', 'json')) ?? []
+  };
 }
 
 async function lastDiagnostic(request, env) {
