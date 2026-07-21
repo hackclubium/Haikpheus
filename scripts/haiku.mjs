@@ -44,7 +44,10 @@ const SYLLABLE_OVERRIDES = new Map(Object.entries({
   fire: [1, 2],
   hour: [1, 2],
   rivers: 2,
-  flowing: 2
+  flowing: 2,
+  haikpheus: 3,
+  cloudflare: 2,
+  emoji: 3
 }));
 
 export function isHaiku(text) {
@@ -77,17 +80,20 @@ export function syllableCounts(text) {
 function cleanedWords(text) {
   return normalizeNumbers(stripSlackNoise(text))
     .toLowerCase()
+    .replace(/[’‘]/g, "'")
     .replace(/\$/g, ' dollar ')
     .replace(/\bise\b/g, 'ize')
-    .replace(/\b([a-z]+)'s\b/g, '$1')
-    .replace(/\b([a-z]+)'ll\b/g, '$1 will')
-    .replace(/\b([a-z]+)'re\b/g, '$1 are')
-    .replace(/\b([a-z]+)'ve\b/g, '$1 have')
-    .replace(/\b([a-z]+)n't\b/g, '$1 not')
     .replace(/[^a-z\s']/g, ' ')
     .split(/\s+/)
-    .map((word) => word.replace(/^'+|'+$/g, ''))
+    .map(cleanedWord)
     .filter(Boolean);
+}
+
+function cleanedWord(word) {
+  word = word.replace(/^'+|'+$/g, '');
+  if (word in SYLLABLE_COUNTS || SYLLABLE_OVERRIDES.has(word)) return word;
+  if (word.endsWith("'s")) return word.slice(0, -2);
+  return word;
 }
 
 function stripSlackNoise(text) {
