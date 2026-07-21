@@ -26,7 +26,6 @@ const ADD_SYLLABLES = [
 ].map((pattern) => new RegExp(pattern));
 
 const TARGETS = [5, 7, 5];
-const MIN_HAIKU_WORDS = 3;
 
 const SYLLABLE_OVERRIDES = new Map(Object.entries({
   are: 1,
@@ -40,9 +39,6 @@ const SYLLABLE_OVERRIDES = new Map(Object.entries({
   nine: 1,
   ten: 1,
   twelve: 1,
-  every: [2, 3],
-  fire: [1, 2],
-  hour: [1, 2],
   rivers: 2,
   flowing: 2
 }));
@@ -57,17 +53,31 @@ export function analyzeHaiku(text) {
 
   const explicitLines = stripSlackNoise(text).trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (explicitLines.length === 3) {
-    const words = explicitLines.flatMap(cleanedWords);
-    const counts = explicitLines.map((line) => likelyLineSyllables(cleanedWords(line)));
-    const ok = words.length >= MIN_HAIKU_WORDS && explicitLines.every((line, index) => possibleLineSyllables(cleanedWords(line)).has(TARGETS[index]));
-    return { ok, lines: explicitLines, counts: ok ? [...TARGETS] : counts };
+    const counts = explicitLines.map((line) => cleanedWords(line).reduce((sum, word) => sum + syllablesInWord(word), 0));
+    return { ok: counts.every((count, index) => count === TARGETS[index]), lines: explicitLines, counts };
   }
 
   const words = cleanedWords(text);
-  const split = words.length >= MIN_HAIKU_WORDS ? splitHaiku(words) : null;
-  if (split) return { ok: true, lines: split.map((items) => items.join(' ')), counts: [...TARGETS] };
+  const lines = [[], [], []];
+  const counts = [0, 0, 0];
+  let line = 0;
 
-  return greedyAnalysis(words);
+  for (const word of words) {
+    const count = syllablesInWord(word);
+    if (line > 2 || counts[line] + count > TARGETS[line]) {
+      return { ok: false, lines: lines.map((items) => items.join(' ')), counts };
+    }
+
+    lines[line].push(word);
+    counts[line] += count;
+    if (counts[line] === TARGETS[line]) line += 1;
+  }
+
+  return {
+    ok: counts.every((count, index) => count === TARGETS[index]),
+    lines: lines.map((items) => items.join(' ')),
+    counts
+  };
 }
 
 export function syllableCounts(text) {
@@ -125,14 +135,9 @@ function numberWords(number) {
 }
 
 function syllablesInWord(word) {
-  return possibleSyllablesInWord(word)[0];
-}
-
-function possibleSyllablesInWord(word) {
   const dictionaryWord = dictionaryForm(word);
-  if (SYLLABLE_OVERRIDES.has(dictionaryWord)) return asCounts(SYLLABLE_OVERRIDES.get(dictionaryWord));
-  const dictionaryCounts = possibleDictionaryCounts(dictionaryWord);
-  if (dictionaryCounts.length) return dictionaryCounts;
+  if (SYLLABLE_OVERRIDES.has(dictionaryWord)) return SYLLABLE_OVERRIDES.get(dictionaryWord);
+  if (dictionaryWord in SYLLABLE_COUNTS) return SYLLABLE_COUNTS[dictionaryWord];
 
   const parts = dictionaryWord.toLowerCase().split(/[^aeiouy]+/).filter(Boolean);
   let syllables = parts.length;
@@ -140,82 +145,7 @@ function possibleSyllablesInWord(word) {
   for (const pattern of SUB_SYLLABLES) if (pattern.test(dictionaryWord)) syllables -= 1;
   for (const pattern of ADD_SYLLABLES) if (pattern.test(dictionaryWord)) syllables += 1;
 
-  return [Math.max(1, syllables)];
-}
-
-function possibleDictionaryCounts(word) {
-  const counts = new Set();
-  if (word in SYLLABLE_COUNTS) counts.add(SYLLABLE_COUNTS[word]);
-  for (let index = 1; `${word}(${index})` in SYLLABLE_COUNTS; index += 1) {
-    counts.add(SYLLABLE_COUNTS[`${word}(${index})`]);
-  }
-  return [...counts].sort((a, b) => a - b);
-}
-
-function possibleLineSyllables(words) {
-  let totals = new Set([0]);
-  for (const word of words) {
-    const next = new Set();
-    for (const total of totals) {
-      for (const count of possibleSyllablesInWord(word)) next.add(total + count);
-    }
-    totals = next;
-  }
-  return totals;
-}
-
-function likelyLineSyllables(words) {
-  return words.reduce((sum, word) => sum + syllablesInWord(word), 0);
-}
-
-function splitHaiku(words) {
-  const lines = [[], [], []];
-  const failed = new Set();
-
-  function search(wordIndex, lineIndex, remaining) {
-    if (lineIndex === TARGETS.length) return wordIndex === words.length;
-    if (remaining === 0) return search(wordIndex, lineIndex + 1, TARGETS[lineIndex + 1]);
-    if (wordIndex === words.length) return false;
-
-    const key = `${wordIndex}:${lineIndex}:${remaining}`;
-    if (failed.has(key)) return false;
-
-    const word = words[wordIndex];
-    for (const count of possibleSyllablesInWord(word)) {
-      if (count > remaining) continue;
-      lines[lineIndex].push(word);
-      if (search(wordIndex + 1, lineIndex, remaining - count)) return true;
-      lines[lineIndex].pop();
-    }
-
-    failed.add(key);
-    return false;
-  }
-
-  return search(0, 0, TARGETS[0]) ? lines : null;
-}
-
-function greedyAnalysis(words) {
-  const lines = [[], [], []];
-  const counts = [0, 0, 0];
-  let line = 0;
-
-  for (const word of words) {
-    const count = syllablesInWord(word);
-    if (line > 2 || counts[line] + count > TARGETS[line]) {
-      return { ok: false, lines: lines.map((items) => items.join(' ')), counts };
-    }
-
-    lines[line].push(word);
-    counts[line] += count;
-    if (counts[line] === TARGETS[line]) line += 1;
-  }
-
-  return { ok: false, lines: lines.map((items) => items.join(' ')), counts };
-}
-
-function asCounts(value) {
-  return Array.isArray(value) ? value : [value];
+  return Math.max(1, syllables);
 }
 
 function dictionaryForm(word) {
