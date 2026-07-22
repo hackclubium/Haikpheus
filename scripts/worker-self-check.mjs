@@ -56,6 +56,8 @@ assert.equal(calls[0].body.blocks[0].text.text, 'autumn rain falls down\ngentle 
 assert.equal(calls[1].url, 'https://slack.com/api/reactions.add');
 assert.equal(calls[2].url, 'https://slack.com/api/chat.postEphemeral');
 await Promise.all(waits.splice(0));
+const postedDiagnostic = JSON.parse(store.get('lastMessageDiagnostic').value);
+assert.match(postedDiagnostic.text, /https:\/\/example\.com/);
 
 calls.length = 0;
 const thanksBody = JSON.stringify({

@@ -11,6 +11,7 @@ assert.equal(isHaiku(':77: gentle rivers flowing slow night birds sing softly'),
 assert.equal(isHaiku('<https://example.com|autumn> rain falls down\nsoft rivers are flowing slow\nnight birds sing softly'), false);
 assert.equal(isHaiku('<slack://canvas/C123|autumn rain falls down\nsoft rivers are flowing slow\nnight birds sing softly>'), false);
 assert.equal(isHaiku('<F123ABC|autumn rain falls down\nsoft rivers are flowing slow\nnight birds sing softly>'), false);
+assert.equal(isHaiku("if u mean the first there's a canvas we're making here https://hackclub.enterprise.slack.com/docs/T0266FRGM/F0BJ8GR09TK"), false);
 assert.equal(isHaiku('*autumn* rain falls down\n_soft_ rivers are flowing slow\n~night~ birds sing softly'), true);
 assert.equal(isHaiku("poet's rain falls down\nsoft rivers are flowing slow\nnight birds sing softly"), true);
 assert.equal(isHaiku("don't wake the old dog\nwe're walking under starlight\nnight birds sing softly"), true);

@@ -1,4 +1,4 @@
-const VERSION = 'haikpheus-events-v33';
+const VERSION = 'haikpheus-events-v34';
 const TRIGGER_RESPONSES = [
   {
     name: 'haiku_meta',
@@ -300,6 +300,7 @@ async function slackEvent(rawBody, env) {
     type: 'haiku_posted',
     channel: event.channel,
     user: event.user,
+    text: event.text ?? '',
     source: 'event',
     lines: result.analysis.lines,
     counts: result.analysis.counts,
