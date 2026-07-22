@@ -24,7 +24,7 @@ export async function main() {
       const analysis = analyzeHaiku(message.text ?? '');
       if (!analysis.ok) continue;
       if ((message.reactions ?? []).some((reaction) => reaction.name === haikuReaction)) continue;
-      const haiku = analysis.lines.join('\n');
+      const haiku = displayText(analysis.lines.join('\n'));
 
       await slack(token, 'chat.postMessage', {
         channel,
@@ -73,4 +73,16 @@ function mustEnv(name) {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
   return value;
+}
+
+function displayText(text) {
+  return text
+    .replace(/<https?:\/\/[^|>]+\|([^>]+)>/g, '$1')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/<[@#!][A-Z0-9][^>]*>/g, ' ')
+    .replace(/<![^>]+>/g, ' ')
+    .replace(/(^|\n)>\s?/g, '$1')
+    .replace(/[*_~]/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }

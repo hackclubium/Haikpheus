@@ -318,7 +318,7 @@ async function processHaikuMessage(env, message) {
   const analysis = analyzeHaiku(message.text);
   if (!analysis.ok) return { ok: false, reason: 'not_haiku', analysis };
 
-  const haiku = analysis.lines.join('\n');
+  const haiku = displayText(analysis.lines.join('\n'));
   await Promise.all([
     slack(env, 'chat.postMessage', {
       channel: message.channel,
@@ -359,7 +359,7 @@ async function handleThankYou(env, event) {
     thread_ts: event.thread_ts,
     text: `${trigger.text}\n---\nby <@${event.user}>`,
     blocks: [
-      { type: 'section', text: { type: 'mrkdwn', text: trigger.text } },
+      { type: 'section', text: { type: 'plain_text', text: displayText(trigger.text) } },
       { type: 'divider' },
       { type: 'context', elements: [{ type: 'mrkdwn', text: `by <@${event.user}>` }] }
     ]
@@ -371,6 +371,18 @@ async function handleThankYou(env, event) {
 
 function thankYouTrigger(text) {
   return TRIGGER_RESPONSES.find((trigger) => trigger.pattern.test(text));
+}
+
+function displayText(text) {
+  return text
+    .replace(/<https?:\/\/[^|>]+\|([^>]+)>/g, '$1')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/<[@#!][A-Z0-9][^>]*>/g, ' ')
+    .replace(/<![^>]+>/g, ' ')
+    .replace(/(^|\n)>\s?/g, '$1')
+    .replace(/[*_~]/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 async function markHaikued(env, threadTs) {

@@ -44,7 +44,7 @@ const eventBody = JSON.stringify({
     channel: 'C123',
     user: 'U123',
     ts: '123.456',
-    text: 'autumn rain falls down\ngentle rivers flowing slow\nnight birds sing softly'
+    text: '*autumn* rain falls down\ngentle rivers flowing slow\nnight birds sing softly https://example.com'
   }
 });
 const eventPost = await worker.fetch(await signedRequest(eventBody, 'application/json'), env, ctx);
@@ -52,6 +52,7 @@ const eventPost = await worker.fetch(await signedRequest(eventBody, 'application
 assert.equal(eventPost.status, 200);
 assert.equal(calls.length, 3);
 assert.equal(calls[0].url, 'https://slack.com/api/chat.postMessage');
+assert.equal(calls[0].body.blocks[0].text.text, 'autumn rain falls down\ngentle rivers flowing slow\nnight birds sing softly');
 assert.equal(calls[1].url, 'https://slack.com/api/reactions.add');
 assert.equal(calls[2].url, 'https://slack.com/api/chat.postEphemeral');
 await Promise.all(waits.splice(0));
