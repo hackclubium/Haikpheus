@@ -104,6 +104,7 @@ function stripSlackNoise(text) {
     .replace(/\bwww\.\S+/gi, ' ')
     .replace(/<[@#!][A-Z0-9][^>]*>/g, ' ')
     .replace(/<![^>]+>/g, ' ')
+    .replace(/\b(?=[A-Z0-9]{8,}\b)(?=[A-Z0-9]*\d)[A-Z0-9]+\b/gi, ' ')
     .replace(/(^|\n)>\s?/g, '$1')
     .replace(/[*_~]/g, '');
 }
