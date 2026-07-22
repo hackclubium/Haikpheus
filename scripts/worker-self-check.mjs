@@ -80,6 +80,22 @@ assert.equal(calls[1].body.thread_ts, '123.456');
 assert.match(calls[1].body.text, /---\nby <@U123>$/);
 assert.notEqual(calls[1].body.text, 'your gratitude warms\nthis dinosaur heart so much\nalways here for you\n---\nby <@U123>');
 
+calls.length = 0;
+const looseThanksBody = JSON.stringify({
+  type: 'event_callback',
+  event: {
+    type: 'message',
+    channel: 'C123',
+    user: 'U123',
+    ts: '125.456',
+    thread_ts: '123.456',
+    text: 'thanks'
+  }
+});
+const looseThanksPost = await worker.fetch(await signedRequest(looseThanksBody, 'application/json'), env, ctx);
+assert.equal(looseThanksPost.status, 200);
+assert.equal(calls.length, 0);
+
 const get = await worker.fetch(new Request('https://haikpheus.test/state', {
   headers: { authorization: 'Bearer state-secret' }
 }), env);

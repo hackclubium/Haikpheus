@@ -7,7 +7,7 @@ const TRIGGER_RESPONSES = [
   },
   {
     name: 'thanks',
-    pattern: /\b(thank\s*you|thanks|tanx|thx|ty|appreciate\s+(it|you)|much appreciated|cheers|props|kudos|bless)\b/i,
+    pattern: /\b(thank\s*you|thanks|tanx|thx|ty|appreciate\s+(it|you)|much appreciated|cheers|props|kudos|bless)[\s,.:;!-]+h\w*\b/i,
     text: 'your gratitude warms\nthis dinosaur heart so much\nalways here for you'
   },
   {
