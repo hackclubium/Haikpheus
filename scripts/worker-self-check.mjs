@@ -78,6 +78,7 @@ assert.equal(calls[1].url, 'https://slack.com/api/chat.postMessage');
 assert.equal(calls[1].body.channel, 'C123');
 assert.equal(calls[1].body.thread_ts, '123.456');
 assert.match(calls[1].body.text, /---\nby <@U123>$/);
+assert.deepEqual(calls[1].body.blocks[1], { type: 'divider' });
 assert.notEqual(calls[1].body.text, 'your gratitude warms\nthis dinosaur heart so much\nalways here for you\n---\nby <@U123>');
 
 calls.length = 0;
