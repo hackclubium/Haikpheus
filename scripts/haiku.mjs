@@ -101,7 +101,9 @@ function stripSlackNoise(text) {
     .replace(/<https?:\/\/[^|>]+\|([^>]+)>/g, '$1')
     .replace(/https?:\/\/\S+/g, ' ')
     .replace(/<[@#!][A-Z0-9][^>]*>/g, ' ')
-    .replace(/<![^>]+>/g, ' ');
+    .replace(/<![^>]+>/g, ' ')
+    .replace(/(^|\n)>\s?/g, '$1')
+    .replace(/[*_~]/g, '');
 }
 
 function normalizeNumbers(text) {
