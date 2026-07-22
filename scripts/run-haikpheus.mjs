@@ -78,6 +78,7 @@ function mustEnv(name) {
 function displayText(text) {
   return text
     .replace(/<[a-z][a-z0-9+.-]*:\/\/[^>]*>/gi, ' ')
+    .replace(/<[^>\s|]+\|[^>]*>/g, ' ')
     .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, ' ')
     .replace(/\bwww\.\S+/gi, ' ')
     .replace(/<[@#!][A-Z0-9][^>]*>/g, ' ')
