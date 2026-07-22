@@ -77,7 +77,7 @@ function mustEnv(name) {
 
 function displayText(text) {
   return text
-    .replace(/<https?:\/\/[^|>]+\|([^>]+)>/g, '$1')
+    .replace(/<https?:\/\/[^|>]+\|[^>]+>/g, ' ')
     .replace(/https?:\/\/\S+/g, ' ')
     .replace(/<[@#!][A-Z0-9][^>]*>/g, ' ')
     .replace(/<![^>]+>/g, ' ')

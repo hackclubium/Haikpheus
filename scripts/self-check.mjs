@@ -8,7 +8,7 @@ assert.equal(isHaiku(':101777:'), true);
 assert.deepEqual(analyzeHaiku(':101777:').counts, [5, 7, 5]);
 assert.deepEqual(analyzeHaiku(':101777:').lines, ['one hundred and one', 'thousand seven hundred and', 'seventy seven']);
 assert.equal(isHaiku(':77: gentle rivers flowing slow night birds sing softly'), true);
-assert.equal(isHaiku('<https://example.com|autumn> rain falls down\nsoft rivers are flowing slow\nnight birds sing softly'), true);
+assert.equal(isHaiku('<https://example.com|autumn> rain falls down\nsoft rivers are flowing slow\nnight birds sing softly'), false);
 assert.equal(isHaiku('*autumn* rain falls down\n_soft_ rivers are flowing slow\n~night~ birds sing softly'), true);
 assert.equal(isHaiku("poet's rain falls down\nsoft rivers are flowing slow\nnight birds sing softly"), true);
 assert.equal(isHaiku("don't wake the old dog\nwe're walking under starlight\nnight birds sing softly"), true);
