@@ -47,7 +47,9 @@ const SYLLABLE_OVERRIDES = new Map(Object.entries({
   flowing: 2,
   haikpheus: 3,
   cloudflare: 2,
-  emoji: 3
+  emoji: 3,
+  savory: [2, 3],
+  sphinxes: 2
 }));
 
 export function isHaiku(text) {

@@ -22,5 +22,6 @@ assert.equal(isHaiku('`autumn rain falls down`\nsoft rivers are flowing slow\nni
 assert.equal(isHaiku('not\na haiku\nat all'), false);
 assert.equal(isHaiku('thanks'), false);
 assert.deepEqual(analyzeHaiku(':77: gentle rivers flowing slow night birds sing softly').counts, [5, 7, 5]);
+assert.equal(isHaiku('Subject squawks shyly\nSphinxes smug savory spam\nSized safe squeezes soft'), true);
 
 console.log('ok');
